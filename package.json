@@ -1,0 +1,19 @@
+{
+    "name": "unique-equb-system-root",
+    "version": "1.0.0",
+    "private": true,
+    "workspaces": [
+        "backend",
+        "frontend"
+    ],
+    "scripts": {
+        "backend:dev": "npm run start:dev --workspace=backend",
+        "frontend:start": "npm run start --workspace=frontend",
+        "test:all": "npm run test --workspace=backend && npm run test --workspace=frontend"
+    },
+    "devDependencies": {
+        "@prisma/client": "6.2.1",
+        "prisma": "6.2.1",
+        "pure-rand": "^6.1.0"
+    }
+}

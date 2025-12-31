@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Enums ---
+
+enum GlobalRole {
+  ADMIN
+  COLLECTOR
+  MEMBER
+}
+
+enum EqubStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  TERMINATED
+}
+
+enum MembershipRole {
+  ADMIN
+  COLLECTOR
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+  REMOVED
+  LEFT
+}
+
+enum ContributionStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum PayoutStatus {
+  PENDING
+  SCHEDULED
+  EXECUTED
+  COMPLETED
+  REJECTED
+}
+
+enum AuditActionType {
+  EQUB_CREATED
+  EQUB_ACTIVATED
+  EQUB_ON_HOLD
+  EQUB_RESUMED
+  EQUB_TERMINATED
+  EQUB_COMPLETED
+  MEMBER_ADDED
+  CONTRIBUTION_CREATED
+  CONTRIBUTION_CONFIRMED
+  CONTRIBUTION_REJECTED
+  PAYOUT_CREATED
+  PAYOUT_COMPLETED
+  PAYOUT_REJECTED
+  ROUND_PROGRESSED
+}
+
+// --- Models ---
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  fullName     String
+  role         GlobalRole @default(MEMBER)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  memberships   Membership[]
+  createdEqubs  Equb[]         @relation("EqubCreator")
+  contributions Contribution[]
+  payouts       Payout[]
+  auditEvents   AuditEvent[]
+
+  @@map("users")
+}
+
+model Equb {
+  id               String     @id @default(uuid())
+  name             String
+  totalRounds      Int
+  currentRound     Int        @default(0)
+  amount           Decimal    @db.Decimal(12, 2)
+  currency         String     @default("ETB")
+  frequency        String     @default("MONTHLY")
+  roundCycleLength Int        @default(30)
+  status           EqubStatus @default(DRAFT)
+
+  createdByUserId String
+  creator         User   @relation("EqubCreator", fields: [createdByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships   Membership[]
+  contributions Contribution[]
+  payouts       Payout[]
+
+  @@map("equbs")
+}
+
+model Membership {
+  equbId    String
+  userId    String
+  role      MembershipRole   @default(MEMBER)
+  status    MembershipStatus @default(ACTIVE)
+  joinedAt  DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  equb Equb @relation(fields: [equbId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([equbId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Contribution {
+  id          String             @id @default(cuid())
+  equbId      String
+  memberId    String
+  roundNumber Int
+  amount      Decimal            @db.Decimal(12, 2)
+  status      ContributionStatus @default(PENDING)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  equb   Equb @relation(fields: [equbId], references: [id])
+  member User @relation(fields: [memberId], references: [id])
+
+  @@unique([equbId, memberId, roundNumber])
+  @@index([memberId])
+  @@index([equbId, roundNumber])
+  @@map("contributions")
+}
+
+model Payout {
+  id              String       @id @default(cuid())
+  equbId          String
+  recipientUserId String
+  roundNumber     Int
+  amount          Decimal      @db.Decimal(12, 2)
+  status          PayoutStatus @default(PENDING)
+  scheduledDate   DateTime?
+  executedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  equb      Equb @relation(fields: [equbId], references: [id])
+  recipient User @relation(fields: [recipientUserId], references: [id])
+
+  @@unique([equbId, roundNumber])
+  @@index([equbId, recipientUserId])
+  @@map("payouts")
+}
+
+model AuditEvent {
+  id          String          @id @default(uuid())
+  timestamp   DateTime        @default(now())
+  actorUserId String
+  actorRole   String
+  actionType  AuditActionType
+  entityType  String
+  entityId    String
+  payload     Json
+  ipAddress   String?
+  userAgent   String?
+  deviceId    String?
+  commandId   String?
+
+  actor User @relation(fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@index([actorUserId])
+  @@map("audit_events")
+}
