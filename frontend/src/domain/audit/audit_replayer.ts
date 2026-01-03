@@ -223,15 +223,15 @@ export class AuditReplayer {
     switch (value.toLowerCase()) {
       case 'paid':
       case 'confirmed':
-        return ContributionStatus.confirmed;
+        return ContributionStatus.CONFIRMED;
       case 'unpaid':
       case 'pending':
-        return ContributionStatus.pending;
+        return ContributionStatus.PENDING;
       case 'rejected':
-        return ContributionStatus.rejected;
+        return ContributionStatus.REJECTED;
       case 'onhold':
       case 'on_hold':
-        return ContributionStatus.pending; // Fallback
+        return ContributionStatus.PENDING; // Fallback
       default:
         throw new DomainError(
           `Invalid contribution status in audit event: ${value}`,
@@ -243,17 +243,17 @@ export class AuditReplayer {
   private static parsePayoutStatus(value: string): PayoutStatus {
     switch (value.toLowerCase()) {
       case 'pending':
-        return PayoutStatus.pending;
+        return PayoutStatus.PENDING;
       case 'scheduled':
       case 'adminconfirmed':
-        return PayoutStatus.scheduled;
+        return PayoutStatus.SCHEDULED;
       case 'executed':
       case 'memberconfirmed':
-        return PayoutStatus.executed;
+        return PayoutStatus.EXECUTED;
       case 'completed':
-        return PayoutStatus.completed;
+        return PayoutStatus.COMPLETED;
       case 'rejected':
-        return PayoutStatus.rejected;
+        return PayoutStatus.REJECTED;
       default:
         throw new DomainError(
           `Invalid payout status in audit event: ${value}`,
@@ -265,18 +265,18 @@ export class AuditReplayer {
   private static parseEqubStatus(value: string): EqubStatus {
     switch (value.toLowerCase()) {
       case 'draft':
-        return EqubStatus.draft;
+        return EqubStatus.DRAFT;
       case 'planned':
       case 'active':
-        return EqubStatus.active;
+        return EqubStatus.ACTIVE;
       case 'onhold':
       case 'on_hold':
-        return EqubStatus.onHold;
+        return EqubStatus.ON_HOLD;
       case 'completed':
-        return EqubStatus.completed;
+        return EqubStatus.COMPLETED;
       case 'canceled':
       case 'terminated':
-        return EqubStatus.terminated;
+        return EqubStatus.TERMINATED;
       default:
         throw new DomainError(
           `Invalid Equb status in audit event: ${value}`,

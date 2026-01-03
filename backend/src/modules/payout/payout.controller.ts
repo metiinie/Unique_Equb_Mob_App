@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Query, ParseUUIDPipe, ParseIntPipe, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Param, Query, ParseUUIDPipe, ParseIntPipe, UseGuards, HttpCode, HttpStatus, Body } from '@nestjs/common';
 import { PayoutService } from './payout.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { GlobalRole, User } from '@prisma/client';
@@ -6,6 +6,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { GetPayoutsQueryDto } from './dtos/get-payouts-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { FinancialWrite } from '../../common/guards/system-safety.guard';
 
 @Controller('equbs')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -13,6 +14,20 @@ export class PayoutController {
     constructor(private readonly payoutService: PayoutService) { }
 
     /**
+     * [READ_ONLY]
+     * GET /equbs/payouts/me
+     * 
+     * Get all payouts received by the current user
+     */
+    @Get('payouts/me')
+    @Roles(GlobalRole.ADMIN, GlobalRole.COLLECTOR, GlobalRole.MEMBER)
+    async getMyPayouts(@CurrentUser() user: User) {
+        return this.payoutService.getMyPayouts(user);
+    }
+
+
+    /**
+     * [FINANCIAL_WRITE] [ADMIN_OPERATION]
      * POST /equbs/:id/payouts/execute
      * 
      * Execute payout for current round
@@ -28,6 +43,7 @@ export class PayoutController {
      */
     @Post(':id/payouts/execute')
     @Roles(GlobalRole.ADMIN, GlobalRole.COLLECTOR)
+    @FinancialWrite()
     @HttpCode(HttpStatus.CREATED)
     async executePayout(
         @CurrentUser() user: User,
@@ -36,6 +52,9 @@ export class PayoutController {
         return this.payoutService.executePayout(user, equbId);
     }
 
+    /**
+     * [READ_ONLY]
+     */
     @Get(':id/payouts')
     @Roles(GlobalRole.ADMIN, GlobalRole.COLLECTOR, GlobalRole.MEMBER)
     async getPayouts(
@@ -46,6 +65,24 @@ export class PayoutController {
         return this.payoutService.getPayouts(user, equbId, query.round);
     }
 
+    /**
+     * [READ_ONLY]
+     * GET /equbs/:id/payouts/eligibility
+     * Phase 8: Payout Pre-Check (Safety Gate)
+     * 
+     * Returns "Human-Readable Financial Narratives".
+     */
+    @Get(':id/payouts/eligibility')
+    @Roles(GlobalRole.ADMIN, GlobalRole.COLLECTOR)
+    async checkPayoutEligibility(
+        @Param('id', ParseUUIDPipe) equbId: string,
+    ) {
+        return this.payoutService.checkPayoutEligibility(equbId);
+    }
+
+    /**
+     * [READ_ONLY]
+     */
     @Get(':id/payouts/:round')
     @Roles(GlobalRole.ADMIN, GlobalRole.COLLECTOR)
     async getRoundPayout(
@@ -57,6 +94,7 @@ export class PayoutController {
     }
 
     /**
+     * [READ_ONLY]
      * GET /equbs/:id/payouts/latest
      * 
      * Get the most recent payout for an Equb

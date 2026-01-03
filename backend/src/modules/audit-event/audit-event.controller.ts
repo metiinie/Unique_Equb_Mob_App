@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Param } from '@nestjs/common';
 import { AuditEventService } from './audit-event.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { GlobalRole, AuditActionType } from '@prisma/client';
@@ -25,7 +25,7 @@ export class AuditEventController {
             actorUserId,
             entityType,
             entityId,
-        });
+        }, GlobalRole.ADMIN);
     }
 
     @Get('my')
@@ -36,8 +36,27 @@ export class AuditEventController {
     ) {
         return this.auditEventService.getMyActivities(
             user.id,
+            user.role as GlobalRole,
             page ? parseInt(page, 10) : 1,
             limit ? parseInt(limit, 10) : 20,
+        );
+    }
+
+    /**
+     * [READ_ONLY]
+     * Phase 8: Human-Readable Timeline
+     */
+    @Get('timeline/:equbId')
+    @Roles(GlobalRole.ADMIN)
+    async getTimeline(
+        @Param('equbId') equbId: string,
+        @Query('page') page?: string,
+        @Query('limit') limit?: string,
+    ) {
+        return this.auditEventService.getEqubTimeline(
+            equbId,
+            page ? parseInt(page, 10) : 1,
+            limit ? parseInt(limit, 10) : 50,
         );
     }
 }

@@ -1,6 +1,6 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { GlobalRole, EqubStatus, PayoutStatus, ContributionStatus, MembershipStatus } from '@prisma/client';
+import { GlobalRole, EqubStatus, PayoutStatus, ContributionStatus, MembershipStatus, MembershipRole } from '@prisma/client';
 
 @Injectable()
 export class ReportingService {
@@ -136,5 +136,131 @@ export class ReportingService {
                 date: p.executedAt
             }))
         };
+    }
+
+    async getCollectorSummary(userId: string) {
+        const memberships = await this.prisma.membership.findMany({
+            where: { userId, role: MembershipRole.COLLECTOR, status: MembershipStatus.ACTIVE },
+            include: {
+                equb: {
+                    include: {
+                        _count: {
+                            select: { memberships: true }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Simple aggregation for now
+        const assignedEqubs = memberships.map(m => m.equb);
+        const totalTarget = assignedEqubs.reduce((acc, e) => acc + Number(e.amount) * (e._count.memberships - 1), 0);
+
+        const assignedEqubIds = assignedEqubs.map(e => e.id);
+
+        const confirmedContributions = await this.prisma.contribution.aggregate({
+            where: {
+                equbId: { in: assignedEqubIds },
+                status: ContributionStatus.CONFIRMED,
+            },
+            _sum: { amount: true }
+        });
+
+        return {
+            assignedEqubs,
+            totalTarget,
+            totalCollected: confirmedContributions._sum.amount || 0,
+        };
+    }
+
+    /**
+     * READ-ONLY: Contribution Report
+     */
+    async getContributionReport(equbId?: string, round?: number) {
+        return this.prisma.contribution.findMany({
+            where: {
+                ...(equbId && { equbId }),
+                ...(round && { roundNumber: round }),
+            },
+            include: {
+                member: { select: { fullName: true, email: true } },
+                equb: { select: { name: true } },
+            },
+            orderBy: [{ equbId: 'asc' }, { roundNumber: 'desc' }],
+        });
+    }
+
+    /**
+     * READ-ONLY: Payout Report
+     */
+    async getPayoutReport(equbId?: string, round?: number) {
+        return this.prisma.payout.findMany({
+            where: {
+                ...(equbId && { equbId }),
+                ...(round && { roundNumber: round }),
+            },
+            include: {
+                recipient: { select: { fullName: true, email: true } },
+                equb: { select: { name: true } },
+            },
+            orderBy: [{ equbId: 'asc' }, { roundNumber: 'desc' }],
+        });
+    }
+
+    /**
+     * Phase 6: Generate exportable ledger report
+     */
+    async generateLedgerReport(equbId: string, format: 'json' | 'csv') {
+        const equb = await this.prisma.equb.findUnique({
+            where: { id: equbId },
+            include: {
+                payouts: {
+                    include: { recipient: { select: { fullName: true } } },
+                    orderBy: { roundNumber: 'asc' }
+                },
+                contributions: {
+                    where: { status: ContributionStatus.SETTLED },
+                    include: { member: { select: { fullName: true } } }
+                }
+            }
+        });
+
+        if (!equb) throw new NotFoundException('Equb not found');
+
+        const rounds = Array.from({ length: equb.currentRound > 0 ? equb.currentRound : 0 }, (_, i) => i + 1);
+
+        const reportData = rounds.map(roundNum => {
+            const payout = equb.payouts.find(p => p.roundNumber === roundNum);
+            const roundContributions = equb.contributions.filter(c => c.roundNumber === roundNum);
+            const totalContributed = roundContributions.reduce((sum, c) => sum + Number(c.amount), 0);
+
+            return {
+                round: roundNum,
+                payoutRecipient: payout?.recipient.fullName || 'N/A',
+                payoutAmount: payout ? Number(payout.amount) : 0,
+                totalContributed,
+                contributionCount: roundContributions.length,
+                status: payout ? 'EXECUTED' : 'PENDING',
+                checksum: `SIG_${equbId}_${roundNum}_${totalContributed}`
+            };
+        });
+
+        if (format === 'json') {
+            return reportData;
+        }
+
+        // CSV Generation
+        const headers = ['Round', 'Recipient', 'Payout Amount', 'Total Contributed', 'Contribution Count', 'Status', 'Checksum'];
+        const rows = reportData.map(r => [
+            r.round,
+            `"${r.payoutRecipient}"`,
+            r.payoutAmount,
+            r.totalContributed,
+            r.contributionCount,
+            r.status,
+            r.checksum
+        ]);
+
+        return [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
     }
 }

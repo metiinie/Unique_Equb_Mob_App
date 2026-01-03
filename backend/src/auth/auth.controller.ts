@@ -29,8 +29,8 @@ export class AuthController {
         });
 
         return {
-            message: 'User created successfully',
-            user: result.user,
+            message: 'OK',
+            // User identity is NOT returned here. Client must call /auth/me
         };
     }
 
@@ -46,16 +46,17 @@ export class AuthController {
         console.log(`[AuthController] Login success for: ${loginDto.email}`);
 
         // Phase 2: Secure Cookie Implementation
+        const isProd = process.env.NODE_ENV === 'production';
         response.cookie('access_token', result.access_token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
+            secure: isProd,
+            sameSite: isProd ? 'strict' : 'lax', // Strict in prod, Lax for dev
             maxAge: 24 * 60 * 60 * 1000,
         });
 
         return {
-            message: 'Login successful',
-            user: result.user,
+            message: 'OK',
+            // User identity is NOT returned here. Client must call /auth/me
         };
     }
 

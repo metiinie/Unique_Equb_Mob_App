@@ -36,12 +36,15 @@ export const LoginScreen: React.FC = () => {
                 ? { email: email.trim(), password, fullName: fullName.trim() }
                 : { email: email.trim(), password };
 
-            // 1. Authenticate
+            // 1. Authenticate (Ignore response body - strictly rely on cookie)
             console.log(`[LoginScreen] Calling ${endpoint} with:`, { email: payload.email, fullName: (payload as any).fullName });
-            const response = await ApiClient.post<{ user: UserDto }>(endpoint, payload);
-            console.log('[LoginScreen] Auth response received:', response);
+            await ApiClient.post<any>(endpoint, payload);
+            console.log('[LoginScreen] Auth mutation successful.');
 
-            // 2. Success - Verify session via /auth/me
+            // 2. Success - Verify session via /auth/me (Single Source of Truth)
+            console.log('[LoginScreen] Waiting for cookie propagation...');
+            await new Promise(resolve => setTimeout(resolve, 100)); // 100ms defensive delay
+
             console.log('[LoginScreen] Verifying session via /auth/me...');
             const userData = await ApiClient.get<UserDto>('/auth/me');
             console.log('[LoginScreen] Session verified:', userData);
@@ -50,8 +53,13 @@ export const LoginScreen: React.FC = () => {
             setUser(userData);
         } catch (error: any) {
             console.error('[LoginScreen] Auth Error:', error);
-            // TASK B: Surface backend message or real error
-            Alert.alert('Authentication Failed', error.message || 'Network request failed');
+
+            // AUTH HARDENING: Handle specific cases
+            if (error.message === 'UNAUTHENTICATED') {
+                Alert.alert('Authentication Failed', 'Invalid credentials or session expired.');
+            } else {
+                Alert.alert('Authentication Failed', error.message || 'Verification failed');
+            }
         } finally {
             setLoading(false);
         }

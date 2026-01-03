@@ -1,7 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
+import { SystemStatusService } from './modules/common/system-status.service';
+import { FinancialMetricsService } from './modules/reporting/financial-metrics.service';
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
@@ -26,6 +28,43 @@ async function bootstrap() {
         forbidNonWhitelisted: true,
         transform: true,
     }));
+
+    app.enableShutdownHooks();
+
+    // STARTUP INTEGRITY CHECK (Phase 9)
+    // We implement a retry mechanism for DB cold-starts (Neon)
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
+    const logger = new Logger('Bootstrap');
+
+    while (retryCount < MAX_RETRIES) {
+        try {
+            const systemStatus = app.get(SystemStatusService);
+            const metricsService = app.get(FinancialMetricsService);
+
+            logger.log(`Running Startup Integrity Check (Attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+            const integrity = await metricsService.performIntegrityCheck();
+
+            const passed = integrity.status === 'OK';
+            systemStatus.setStartupIntegrityResult(passed);
+
+            if (!passed) {
+                logger.warn('System starting in DEGRADED mode due to integrity violations.');
+            }
+            break; // Success or Degraded (Handled) -> proceed to listen
+        } catch (e) {
+            retryCount++;
+            logger.error(`Integrity Check Failed (Attempt ${retryCount}/${MAX_RETRIES}): ${e.message}`);
+
+            if (retryCount >= MAX_RETRIES) {
+                logger.error('CRITICAL: Startup Integrity Check failed after max retries. Aborting.');
+                process.exit(1);
+            }
+
+            // Wait 2 seconds before retry
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+    }
 
     await app.listen(process.env.PORT || 3000, '0.0.0.0');
 }

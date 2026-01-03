@@ -5,9 +5,12 @@ import { StatusBar } from 'expo-status-bar';
 import { ApiClient } from '../services/api_client';
 import { EqubDto } from '../../domain/dtos';
 import { useEqubContext } from '../../application/equb/equb_context';
-import { EqubStatus } from '../../core/constants/enums';
+import { EqubStatus, GlobalRole } from '../../core/constants/enums';
+import { useAuth } from '../../application/auth/auth_context';
 
-export const EqubSelectionScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+export const EqubSelectionScreen: React.FC<{ route: any, navigation: any }> = ({ route, navigation }) => {
+    const { user } = useAuth();
+    const { managedOnly } = route.params || {};
     const { setActiveEqubId, setActiveEqubName } = useEqubContext();
     const [equbs, setEqubs] = useState<EqubDto[]>([]);
     const [loading, setLoading] = useState(true);
@@ -19,8 +22,9 @@ export const EqubSelectionScreen: React.FC<{ navigation: any }> = ({ navigation 
     const fetchEqubs = async () => {
         setLoading(true);
         try {
-            // HUMBLE: Asking backend for Equbs
-            const data = await ApiClient.get<EqubDto[]>('/equbs');
+            // HUMBLE: Asking backend for Equbs based on context
+            const endpoint = managedOnly ? '/equbs/managed' : '/equbs';
+            const data = await ApiClient.get<EqubDto[]>(endpoint);
             setEqubs(data);
         } catch (error: any) {
             Alert.alert('Error', error.message);
@@ -32,7 +36,13 @@ export const EqubSelectionScreen: React.FC<{ navigation: any }> = ({ navigation 
     const handleSelectEqub = (equb: EqubDto) => {
         setActiveEqubId(equb.id);
         setActiveEqubName(equb.name);
-        navigation.navigate('EqubOverview', { equbId: equb.id });
+
+        // If Admin/Collector, go to Round Management, else go to Overview
+        if (user?.role === GlobalRole.ADMIN || user?.role === GlobalRole.COLLECTOR) {
+            navigation.navigate('RoundManagement', { equbId: equb.id });
+        } else {
+            navigation.navigate('EqubOverview', { equbId: equb.id });
+        }
     };
 
     const getStatusStyle = (status: EqubStatus) => {
@@ -63,8 +73,10 @@ export const EqubSelectionScreen: React.FC<{ navigation: any }> = ({ navigation 
             <StatusBar style="light" />
             <View style={styles.container}>
                 <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Your Equbs</Text>
-                    <Text style={styles.headerSubtitle}>Select an Equb to manage</Text>
+                    <Text style={styles.headerTitle}>{managedOnly ? 'Managed Equbs' : 'Your Equbs'}</Text>
+                    <Text style={styles.headerSubtitle}>
+                        {managedOnly ? 'Select an Equb to manage rounds and members' : 'Select an Equb to view details'}
+                    </Text>
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scrollContent}>

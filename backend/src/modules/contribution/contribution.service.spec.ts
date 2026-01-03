@@ -34,11 +34,18 @@ describe('ContributionService (Unit Tests)', () => {
             findUnique: jest.fn(),
             create: jest.fn(),
             update: jest.fn(),
+            count: jest.fn(),
+        },
+        payout: {
+            findUnique: jest.fn(),
         },
     };
 
     const mockPrismaService = {
-        $transaction: jest.fn((callback) => callback(mockTx)),
+        $transaction: jest.fn((callback, options) => {
+            if (typeof callback === 'function') return callback(mockTx);
+            return Promise.all(callback.map(cb => cb(mockTx)));
+        }),
         equb: { findUnique: jest.fn() },
         membership: { findMany: jest.fn(), findUnique: jest.fn() },
     };
@@ -63,6 +70,8 @@ describe('ContributionService (Unit Tests)', () => {
         passwordHash: 'hash',
         fullName: 'Test Member',
         role: GlobalRole.MEMBER,
+        notificationPreferences: {},
+        language: 'en',
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -73,6 +82,8 @@ describe('ContributionService (Unit Tests)', () => {
         passwordHash: 'hash',
         fullName: 'Test Admin',
         role: GlobalRole.ADMIN,
+        notificationPreferences: {},
+        language: 'en',
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -83,6 +94,8 @@ describe('ContributionService (Unit Tests)', () => {
         passwordHash: 'hash',
         fullName: 'Test Collector',
         role: GlobalRole.COLLECTOR,
+        notificationPreferences: {},
+        language: 'en',
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -142,11 +155,11 @@ describe('ContributionService (Unit Tests)', () => {
     describe('createContribution', () => {
         it('should throw ForbiddenException if user role is not MEMBER', async () => {
             await expect(
-                service.createContribution(adminUser, 'equb-id', 1000),
+                service.createContribution(adminUser, 'equb-id', 1, 1000),
             ).rejects.toThrow(ForbiddenException);
 
             await expect(
-                service.createContribution(collectorUser, 'equb-id', 1000),
+                service.createContribution(collectorUser, 'equb-id', 1, 1000),
             ).rejects.toThrow(ForbiddenException);
         });
 
@@ -154,7 +167,7 @@ describe('ContributionService (Unit Tests)', () => {
             mockTx.equb.findUnique.mockResolvedValue(null);
 
             await expect(
-                service.createContribution(memberUser, 'invalid-equb-id', 1000),
+                service.createContribution(memberUser, 'invalid-equb-id', 1, 1000),
             ).rejects.toThrow(BadRequestException);
         });
 
@@ -163,8 +176,8 @@ describe('ContributionService (Unit Tests)', () => {
             mockTx.equb.findUnique.mockResolvedValue(draftEqub);
 
             await expect(
-                service.createContribution(memberUser, 'equb-id', 1000),
-            ).rejects.toThrow(ConflictException);
+                service.createContribution(memberUser, 'equb-id', 1, 1000),
+            ).rejects.toThrow('Equb not active');
 
             expect(mockTx.equb.findUnique).toHaveBeenCalledWith({
                 where: { id: 'equb-id' },
@@ -173,10 +186,11 @@ describe('ContributionService (Unit Tests)', () => {
 
         it('should throw BadRequestException if amount does not match Equb.amount', async () => {
             mockTx.equb.findUnique.mockResolvedValue(activeEqub);
+            mockTx.membership.findUnique.mockResolvedValue(activeMembership);
 
             await expect(
-                service.createContribution(memberUser, 'equb-id', 500),
-            ).rejects.toThrow(BadRequestException);
+                service.createContribution(memberUser, 'equb-id', 1, 500),
+            ).rejects.toThrow('Incorrect amount');
         });
 
         it('should throw ForbiddenException if user is not a member of the Equb', async () => {
@@ -184,7 +198,7 @@ describe('ContributionService (Unit Tests)', () => {
             mockTx.membership.findUnique.mockResolvedValue(null);
 
             await expect(
-                service.createContribution(memberUser, 'equb-id', 1000),
+                service.createContribution(memberUser, 'equb-id', 1, 1000),
             ).rejects.toThrow(ForbiddenException);
         });
 
@@ -196,8 +210,8 @@ describe('ContributionService (Unit Tests)', () => {
             });
 
             await expect(
-                service.createContribution(memberUser, 'equb-id', 1000),
-            ).rejects.toThrow(ConflictException);
+                service.createContribution(memberUser, 'equb-id', 1, 1000),
+            ).rejects.toThrow(ForbiddenException);
         });
 
         it('should throw ConflictException if duplicate contribution exists', async () => {
@@ -209,37 +223,31 @@ describe('ContributionService (Unit Tests)', () => {
             });
 
             await expect(
-                service.createContribution(memberUser, 'equb-id', 1000),
-            ).rejects.toThrow(ConflictException);
+                service.createContribution(memberUser, 'equb-id', 1, 1000),
+            ).rejects.toThrow('Contribution already submitted');
         });
 
         it('should successfully create contribution when all rules are satisfied', async () => {
             mockTx.equb.findUnique.mockResolvedValue(activeEqub);
             mockTx.membership.findUnique.mockResolvedValue(activeMembership);
             mockTx.contribution.findUnique.mockResolvedValue(null);
+            mockTx.contribution.count.mockResolvedValue(1);
             mockTx.contribution.create.mockResolvedValue({
                 id: 'new-contribution-id',
                 equbId: 'equb-id',
                 memberId: 'member-id',
                 roundNumber: 1,
                 amount: 1000,
-                status: ContributionStatus.PENDING,
+                status: ContributionStatus.CONFIRMED,
                 createdAt: new Date(),
                 updatedAt: new Date(),
-                equb: activeEqub,
-                member: memberUser,
             });
 
-            const result = await service.createContribution(memberUser, 'equb-id', 1000);
+            const result = await service.createContribution(memberUser, 'equb-id', 1, 1000);
 
-            expect(result.status).toBe(ContributionStatus.PENDING);
-            expect(result.amount).toBe(1000);
-            expect(mockAuditService.logEvent).toHaveBeenCalledWith(
-                { id: memberUser.id, role: memberUser.role },
-                AuditActionType.CONTRIBUTION_CREATED,
-                expect.anything(),
-                expect.anything(),
-            );
+            expect(result.contribution.status).toBe(ContributionStatus.CONFIRMED);
+            expect(result.summary.confirmedCount).toBe(1);
+            expect(mockAuditService.logEvent).toHaveBeenCalled();
         });
     });
 

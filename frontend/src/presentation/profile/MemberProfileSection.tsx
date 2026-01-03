@@ -1,81 +1,122 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useProfileHandler } from './useProfileHandler';
+import { ApiClient } from '../services/api_client';
+import { EqubDto, PayoutDto } from '../../domain/dtos';
 
-// Pure Section Component: Member-specific profile content
-// Shows Active Equbs and Past Payouts for members
+interface MemberProfileSectionProps { }
 
-interface MemberProfileSectionProps {
-    navigation?: any;
-}
+export const MemberProfileSection: React.FC<MemberProfileSectionProps> = () => {
+    const { handleAction } = useProfileHandler();
+    const [activeEqubs, setActiveEqubs] = useState<EqubDto[]>([]);
+    const [pastPayouts, setPastPayouts] = useState<(PayoutDto & { equb?: { name: string } })[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-export const MemberProfileSection: React.FC<MemberProfileSectionProps> = ({ navigation }) => {
-    // Hardcoded data matching the source design
-    const activeEqubs = [
-        { id: 1, name: 'Addis Monthly', amount: '10,000 ETB', pos: 4, total: 12, status: 'Paid', bg: 'emerald' },
-        { id: 2, name: 'Office Group', amount: '2,000 ETB', pos: 10, total: 12, status: 'Due', bg: 'amber' },
-        { id: 3, name: 'Community Save', amount: '5,000 ETB', pos: null, total: null, status: 'Won', bg: 'emerald' },
-    ];
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                const [equbsData, payoutsData] = await Promise.all([
+                    ApiClient.get<EqubDto[]>('/equbs'),
+                    ApiClient.get<(PayoutDto & { equb?: { name: string } })[]>('/equbs/payouts/me')
+                ]);
+                setActiveEqubs(equbsData);
+                setPastPayouts(payoutsData || []);
+                setError(null);
+            } catch (err: any) {
+                console.error('[MemberProfileSection] Fetch failed:', err);
+                setError('Failed to load your equb activity');
+            } finally {
+                setLoading(false);
+            }
+        };
 
-    const pastPayouts = [
-        { id: 1, date: 'Oct 24', year: '2023', name: 'Neighborhood', amount: '50,000 ETB' },
-        { id: 2, date: 'Aug 15', year: '2023', name: 'Friends & Family', amount: '25,000 ETB' },
-        { id: 3, date: 'May 02', year: '2023', name: 'Office Car Fund', amount: '100,000 ETB' },
-    ];
+        fetchData();
+    }, []);
+
+    const mapStatus = (status: string) => {
+        switch (status) {
+            case 'ACTIVE': return { label: 'Active', bg: 'emerald' };
+            case 'DRAFT': return { label: 'Draft', bg: 'amber' };
+            case 'ON_HOLD': return { label: 'On Hold', bg: 'amber' };
+            case 'COMPLETED': return { label: 'Won', bg: 'emerald' };
+            default: return { label: status, bg: 'amber' };
+        }
+    };
 
     return (
         <>
-            {/* Active Equbs */}
+            {/* Active Equbs Section */}
             <View style={styles.sectionContainer}>
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Active Equbs</Text>
-                    <TouchableOpacity>
-                        <Text style={styles.viewHistoryText}>View History</Text>
+                    <TouchableOpacity onPress={() => handleAction('VIEW_HISTORY')}>
+                        <Text style={styles.viewHistoryText}>View All</Text>
                     </TouchableOpacity>
                 </View>
 
                 <View style={styles.cardContainer}>
                     <View style={styles.tableHeader}>
                         <Text style={[styles.colHeader, { flex: 2, paddingLeft: 4 }]}>EQUB / AMOUNT</Text>
-                        <Text style={[styles.colHeader, { flex: 1, textAlign: 'center' }]}>POS</Text>
+                        <Text style={[styles.colHeader, { flex: 1, textAlign: 'center' }]}>ROUND</Text>
                         <Text style={[styles.colHeader, { flex: 1, textAlign: 'right', paddingRight: 4 }]}>STATUS</Text>
                     </View>
 
-                    {activeEqubs.map((item, index) => (
-                        <TouchableOpacity key={item.id} style={[styles.tableRow, index !== activeEqubs.length - 1 && styles.borderBottom]}>
-                            <View style={{ flex: 2 }}>
-                                <Text style={styles.equbName}>{item.name}</Text>
-                                <Text style={styles.equbAmount}>{item.amount}</Text>
-                            </View>
-                            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                                {item.pos ? (
-                                    <Text style={styles.posText}>{item.pos}<Text style={styles.posTotal}>/{item.total}</Text></Text>
-                                ) : (
-                                    <Text style={[styles.posText, { color: '#10b981' }]}>Won</Text>
-                                )}
-                            </View>
-                            <View style={{ flex: 1, alignItems: 'flex-end', justifyContent: 'center' }}>
-                                <View style={[
-                                    styles.statusBadge,
-                                    item.bg === 'emerald' ? styles.statusEmerald : styles.statusAmber
-                                ]}>
-                                    <View style={[
-                                        styles.statusDot,
-                                        item.bg === 'emerald' ? styles.dotEmerald : styles.dotAmber
-                                    ]} />
-                                    <Text style={[
-                                        styles.statusText,
-                                        item.bg === 'emerald' ? styles.textEmerald : styles.textAmber
-                                    ]}>
-                                        {item.status}
-                                    </Text>
-                                </View>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
+                    {loading ? (
+                        <View style={styles.centerContent}>
+                            <ActivityIndicator size="small" color="#2b6cee" />
+                            <Text style={styles.infoText}>Loading your equbs...</Text>
+                        </View>
+                    ) : error ? (
+                        <View style={styles.centerContent}>
+                            <Text style={styles.errorText}>{error}</Text>
+                        </View>
+                    ) : activeEqubs.length === 0 ? (
+                        <View style={styles.centerContent}>
+                            <Text style={styles.emptyText}>No active equbs found.</Text>
+                        </View>
+                    ) : (
+                        activeEqubs.map((item, index) => {
+                            const { label, bg } = mapStatus(item.status);
+                            return (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={[styles.tableRow, index !== activeEqubs.length - 1 && styles.borderBottom]}
+                                    onPress={() => handleAction('EQUB_DETAILS', { equbId: item.id })}
+                                >
+                                    <View style={{ flex: 2 }}>
+                                        <Text style={styles.equbName}>{item.name}</Text>
+                                        <Text style={styles.equbAmount}>{item.amount.toLocaleString()} {item.currency}</Text>
+                                    </View>
+                                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                                        <Text style={styles.posText}>{item.currentRound}<Text style={styles.posTotal}>/{item.totalRounds}</Text></Text>
+                                    </View>
+                                    <View style={{ flex: 1, alignItems: 'flex-end', justifyContent: 'center' }}>
+                                        <View style={[
+                                            styles.statusBadge,
+                                            bg === 'emerald' ? styles.statusEmerald : styles.statusAmber
+                                        ]}>
+                                            <View style={[
+                                                styles.statusDot,
+                                                bg === 'emerald' ? styles.dotEmerald : styles.dotAmber
+                                            ]} />
+                                            <Text style={[
+                                                styles.statusText,
+                                                bg === 'emerald' ? styles.textEmerald : styles.textAmber
+                                            ]}>
+                                                {label}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        })
+                    )}
                 </View>
             </View>
 
-            {/* Past Payouts */}
+            {/* Past Payouts Section */}
             <View style={[styles.sectionContainer, { marginTop: 24 }]}>
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Past Payouts</Text>
@@ -88,23 +129,47 @@ export const MemberProfileSection: React.FC<MemberProfileSectionProps> = ({ navi
                         <Text style={[styles.colHeader, { flex: 1.5, textAlign: 'right', paddingRight: 4 }]}>AMOUNT</Text>
                     </View>
 
-                    {pastPayouts.map((item, index) => (
-                        <TouchableOpacity key={item.id} style={[styles.tableRow, index !== pastPayouts.length - 1 && styles.borderBottom]}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.equbName}>{item.date}</Text>
-                                <Text style={styles.equbAmount}>{item.year}</Text>
-                            </View>
-                            <View style={{ flex: 2, justifyContent: 'center' }}>
-                                <Text style={styles.payoutName} numberOfLines={1}>{item.name}</Text>
-                            </View>
-                            <View style={{ flex: 1.5, alignItems: 'flex-end', justifyContent: 'center' }}>
-                                <Text style={styles.payoutAmount}>{item.amount}</Text>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
+                    {loading ? (
+                        <View style={styles.centerContent}>
+                            <Text style={styles.infoText}>Loading payouts...</Text>
+                        </View>
+                    ) : pastPayouts.length === 0 ? (
+                        <View style={styles.centerContent}>
+                            <Text style={styles.emptyText}>No payouts received yet.</Text>
+                        </View>
+                    ) : (
+                        pastPayouts.map((item, index) => {
+                            const dateObj = new Date(item.executedAt || item.createdAt);
+                            const month = dateObj.toLocaleString('default', { month: 'short' });
+                            const day = dateObj.getDate();
+                            const year = dateObj.getFullYear();
+
+                            return (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={[styles.tableRow, index !== pastPayouts.length - 1 && styles.borderBottom]}
+                                    onPress={() => handleAction('EQUB_DETAILS', { equbId: item.equbId })}
+                                >
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.equbName}>{month} {day}</Text>
+                                        <Text style={styles.equbAmount}>{year}</Text>
+                                    </View>
+                                    <View style={{ flex: 2, justifyContent: 'center' }}>
+                                        <Text style={styles.payoutName} numberOfLines={1}>{item.equb?.name || 'Unknown Equb'}</Text>
+                                    </View>
+                                    <View style={{ flex: 1.5, alignItems: 'flex-end', justifyContent: 'center' }}>
+                                        <Text style={styles.payoutAmount}>{item.amount.toLocaleString()} ETB</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        })
+                    )}
                 </View>
 
-                <TouchableOpacity style={styles.joinBtn}>
+                <TouchableOpacity
+                    style={styles.joinBtn}
+                    onPress={() => handleAction('JOIN_EQUB')}
+                >
                     <Text style={styles.joinIcon}>+</Text>
                     <Text style={styles.joinText}>Join New Equb</Text>
                 </TouchableOpacity>
@@ -251,5 +316,26 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '700',
         color: '#94a3b8',
+    },
+    centerContent: {
+        padding: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    infoText: {
+        color: '#94a3b8',
+        marginTop: 8,
+        fontSize: 14,
+    },
+    errorText: {
+        color: '#ef4444',
+        fontSize: 14,
+        textAlign: 'center',
+    },
+    emptyText: {
+        color: '#64748b',
+        fontSize: 14,
+        fontStyle: 'italic',
+        textAlign: 'center',
     },
 });

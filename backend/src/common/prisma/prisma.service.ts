@@ -17,31 +17,30 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
                     url: url,
                 },
             },
-            log: ['query', 'info', 'warn', 'error'],
+            log: [
+                { emit: 'event', level: 'query' },
+                { emit: 'event', level: 'info' },
+                { emit: 'event', level: 'warn' },
+                { emit: 'event', level: 'error' },
+            ],
         });
     }
 
     async onModuleInit() {
-        let retries = 5;
-        while (retries > 0) {
-            try {
-                await this.$connect();
-                this.logger.log('Successfully connected to Neon database via Prisma.');
-                return;
-            } catch (error: any) {
-                this.logger.error(`Failed to connect to Neon database (retries left: ${retries}): ${error.message}`);
-                retries--;
-                if (retries === 0) {
-                    this.logger.error('Max retries reached. Could not connect to database.');
-                } else {
-                    this.logger.log('Retrying in 5 seconds...');
-                    await new Promise(res => setTimeout(res, 5000));
-                }
-            }
+        try {
+            this.logger.log('Connecting to database...');
+            await this.$connect();
+            this.logger.log('✅ Database connection established successfully.');
+        } catch (error: any) {
+            this.logger.error(`❌ FATAL: Failed to connect to database: ${error.message}`, error.stack);
+            // We do NOT retry indefinitely causing loops. We fail fast to restart.
+            throw error;
         }
     }
 
     async onModuleDestroy() {
+        this.logger.log('Disconnecting from database...');
         await this.$disconnect();
+        this.logger.log('✅ Database connection closed.');
     }
 }

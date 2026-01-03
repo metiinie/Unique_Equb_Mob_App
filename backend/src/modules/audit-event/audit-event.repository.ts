@@ -16,6 +16,7 @@ export class AuditEventRepository {
         commandId?: string;
         ipAddress?: string;
         deviceId?: string;
+        systemVersion?: string;
     }) {
         return this.prisma.auditEvent.create({
             data: {
@@ -28,6 +29,7 @@ export class AuditEventRepository {
                 commandId: data.commandId,
                 ipAddress: data.ipAddress,
                 deviceId: data.deviceId,
+                systemVersion: data.systemVersion,
             },
         });
     }
@@ -41,18 +43,30 @@ export class AuditEventRepository {
         entityId?: string;
     }) {
         const { skip, take, ...where } = params;
-        return this.prisma.auditEvent.findMany({
-            where,
-            skip: skip || 0,
-            take: take || 20,
-            orderBy: { timestamp: 'desc' },
-        });
+        // AuditEvents are append-only. Ordering is deterministic by (timestamp, seqId).
+        const [data, total] = await this.prisma.$transaction([
+            this.prisma.auditEvent.findMany({
+                where,
+                skip: skip || 0,
+                take: take || 20,
+                orderBy: [
+                    { timestamp: 'asc' },
+                    { seqId: 'asc' }
+                ],
+            }),
+            this.prisma.auditEvent.count({ where }),
+        ]);
+
+        return { data, total };
     }
 
     async findByEntity(type: string, id: string) {
         return this.prisma.auditEvent.findMany({
             where: { entityType: type, entityId: id },
-            orderBy: { timestamp: 'asc' },
+            orderBy: [
+                { timestamp: 'asc' },
+                { seqId: 'asc' }
+            ],
         });
     }
 }

@@ -1,62 +1,102 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useMemo } from 'react';
+import { View, Text, StyleSheet, SectionList, SafeAreaView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { ApiClient } from '../services/api_client';
+import { useAuth } from '../../application/auth/auth_context';
+import { GlobalRole } from '../../core/constants/enums';
+import { StatusBar } from 'expo-status-bar';
 
-export const ActivitiesTabScreen: React.FC = () => {
-    const [activities, setActivities] = useState<any[]>([]);
+// UI FROZEN — Activities render backend facts only. No interpretation permitted.
+
+interface AuditEvent {
+    description: string;
+    severity: 'INFO' | 'WARNING' | 'CRITICAL';
+    timestamp: string;
+}
+
+export const ActivitiesTabScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+    const { user } = useAuth();
+    const [activities, setActivities] = useState<AuditEvent[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const fetchActivities = async () => {
+        try {
+            const endpoint = user?.role === GlobalRole.ADMIN ? '/audit-events' : '/audit-events/my';
+            const response = await ApiClient.get<any>(endpoint);
+
+            if (response && Array.isArray(response.data)) {
+                setActivities(response.data);
+            } else if (Array.isArray(response)) {
+                setActivities(response);
+            } else {
+                setActivities([]);
+            }
+        } catch (error) {
+            console.error('[ActivitiesTabScreen] Fetch error:', error);
+            setActivities([]);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchActivities = async () => {
-            try {
-                const data = await ApiClient.get('/audit-events/my');
-                setActivities(data as any[]);
-            } catch (error) {
-                console.error('[ActivitiesTabScreen] Fetch error:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchActivities();
-    }, []);
+    }, [user?.role]);
+
+    const renderItem = ({ item }: { item: AuditEvent }) => {
+        const severityColor =
+            item.severity === 'CRITICAL' ? '#ef4444' :
+                item.severity === 'WARNING' ? '#f59e0b' :
+                    '#3b82f6';
+
+        return (
+            <View style={styles.activityItem}>
+                <View style={[styles.severityIndicator, { backgroundColor: severityColor }]} />
+                <View style={styles.activityContent}>
+                    <Text style={styles.description}>{item.description}</Text>
+                    <Text style={styles.timestamp}>
+                        {new Date(item.timestamp).toISOString().replace('T', ' ').slice(0, 19)}
+                    </Text>
+                </View>
+            </View>
+        );
+    };
 
     if (loading) {
         return (
             <SafeAreaView style={styles.container}>
-                <ActivityIndicator color="#2b6cee" style={{ marginTop: 40 }} />
+                <View style={styles.center}>
+                    <ActivityIndicator color="#3b82f6" />
+                </View>
             </SafeAreaView>
         );
     }
 
     return (
         <SafeAreaView style={styles.container}>
+            <StatusBar style="light" />
             <View style={styles.header}>
-                <Text style={styles.title}>Activities</Text>
+                <Text style={styles.title}>Operation Ledger</Text>
+                <Text style={styles.subtitle}>Deterministic Append-Only record</Text>
             </View>
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                {activities.length === 0 ? (
+
+            <FlatList
+                data={activities}
+                keyExtractor={(_, index) => index.toString()}
+                renderItem={renderItem}
+                contentContainerStyle={styles.listContent}
+                refreshing={refreshing}
+                onRefresh={() => {
+                    setRefreshing(true);
+                    fetchActivities();
+                }}
+                ListEmptyComponent={
                     <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyIcon}>📜</Text>
-                        <Text style={styles.emptyTitle}>No Activities Yet</Text>
-                        <Text style={styles.emptyText}>
-                            Your Equb activities will appear here once you join an Equb or perform actions like contributions.
-                        </Text>
+                        <Text style={styles.emptyTitle}>Zero records</Text>
                     </View>
-                ) : (
-                    activities.map((item) => (
-                        <View key={item.id} style={styles.activityCard}>
-                            <View style={styles.activityIcon}>
-                                <Text>⚡</Text>
-                            </View>
-                            <View style={styles.activityInfo}>
-                                <Text style={styles.actionType}>{item.actionType.replace(/_/g, ' ')}</Text>
-                                <Text style={styles.entityInfo}>{item.entityType}: {item.entityId}</Text>
-                                <Text style={styles.timestamp}>{new Date(item.createdAt).toLocaleString()}</Text>
-                            </View>
-                        </View>
-                    ))
-                )}
-            </ScrollView>
+                }
+            />
         </SafeAreaView>
     );
 };
@@ -64,81 +104,77 @@ export const ActivitiesTabScreen: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#101622',
+        backgroundColor: '#000000',
     },
-    header: {
-        padding: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#1e293b',
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#ffffff',
-    },
-    scrollContent: {
-        padding: 16,
-    },
-    activityCard: {
-        flexDirection: 'row',
-        backgroundColor: '#1c2333',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#2d3748',
-    },
-    activityIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#1e293b',
+    center: {
+        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
     },
-    activityInfo: {
-        flex: 1,
+    header: {
+        paddingHorizontal: 20,
+        paddingVertical: 20,
+        backgroundColor: '#0a0a0a',
+        borderBottomWidth: 1,
+        borderBottomColor: '#1a1a1a',
     },
-    actionType: {
+    title: {
+        fontSize: 18,
+        fontWeight: '900',
         color: '#ffffff',
-        fontWeight: '700',
-        fontSize: 14,
-        textTransform: 'capitalize',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
-    entityInfo: {
-        color: '#94a3b8',
-        fontSize: 12,
-        marginTop: 2,
+    subtitle: {
+        fontSize: 10,
+        color: '#444444',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        marginTop: 4,
+    },
+    listContent: {
+        paddingBottom: 20,
+    },
+    activityItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#0a0a0a',
+    },
+    severityIndicator: {
+        width: 2,
+        height: 12,
+        marginRight: 16,
+    },
+    activityContent: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    description: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#cccccc',
+        fontFamily: 'monospace',
     },
     timestamp: {
-        color: '#64748b',
         fontSize: 10,
-        marginTop: 4,
+        color: '#333333',
+        fontFamily: 'monospace',
     },
     emptyContainer: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: 100,
-        padding: 40,
-    },
-    emptyIcon: {
-        fontSize: 64,
-        marginBottom: 20,
     },
     emptyTitle: {
-        fontSize: 20,
+        fontSize: 12,
         fontWeight: '700',
-        color: '#ffffff',
-        marginBottom: 12,
-        textAlign: 'center',
-    },
-    emptyText: {
-        fontSize: 14,
-        color: '#94a3b8',
-        textAlign: 'center',
-        lineHeight: 22,
+        color: '#222222',
+        textTransform: 'uppercase',
     },
 });

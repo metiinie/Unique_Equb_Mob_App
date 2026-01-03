@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Dimensions, ActivityIndicator } from 'react-native';
 import { Theme } from '../theme';
 import { StatusBar } from 'expo-status-bar';
+import { useNotifications } from '../../application/notification/notification_context';
+import { NotificationType } from '../../domain/dtos';
 
 const { width } = Dimensions.get('window');
 
@@ -93,10 +95,33 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ type, title, messag
     );
 };
 
+
 export const NotificationCenterScreen = ({ navigation }: { navigation: any }) => {
+    const { notifications, loading, refresh } = useNotifications();
     const [filter, setFilter] = useState('All');
 
     const filters = ['All', 'Reminders', 'Alerts', 'Payouts'];
+
+    const getFilteredNotifications = () => {
+        if (filter === 'All') return notifications;
+        if (filter === 'Reminders') return notifications.filter(n => n.type === NotificationType.CONTRIBUTION_PENDING);
+        if (filter === 'Alerts') return notifications.filter(n => n.type === NotificationType.AUDIT_ALERT || n.type === NotificationType.EQUB_COMPLETED);
+        if (filter === 'Payouts') return notifications.filter(n => n.type === NotificationType.PAYOUT_RECEIVED);
+        return notifications;
+    };
+
+    const getNotificationTypeEmoji = (type: NotificationType): 'critical' | 'success' | 'warning' | 'info' => {
+        switch (type) {
+            case NotificationType.CONTRIBUTION_PENDING: return 'warning';
+            case NotificationType.PAYOUT_RECEIVED: return 'success';
+            case NotificationType.EQUB_COMPLETED: return 'success';
+            case NotificationType.ROUND_COMPLETE: return 'info';
+            case NotificationType.AUDIT_ALERT: return 'critical';
+            default: return 'info';
+        }
+    };
+
+    const filtered = getFilteredNotifications();
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -105,8 +130,8 @@ export const NotificationCenterScreen = ({ navigation }: { navigation: any }) =>
                 {/* Header */}
                 <View style={styles.header}>
                     <Text style={styles.headerTitle}>Notifications</Text>
-                    <TouchableOpacity>
-                        <Text style={styles.markReadText}>Mark all as read</Text>
+                    <TouchableOpacity onPress={refresh}>
+                        <Text style={styles.markReadText}>Refresh</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -129,53 +154,31 @@ export const NotificationCenterScreen = ({ navigation }: { navigation: any }) =>
                 </View>
 
                 {/* Content */}
-                <ScrollView style={styles.contentList} contentContainerStyle={styles.listContainer}>
-                    {/* Today Section */}
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>TODAY</Text>
+                {loading ? (
+                    <View style={{ flex: 1, justifyContent: 'center' }}>
+                        <ActivityIndicator color={Theme.colors.primary} />
                     </View>
-
-                    <NotificationItem
-                        type="critical"
-                        title="Missed Payment"
-                        message=""
-                        richMessage={<Text>Your contribution for <Text style={styles.highlight}>Round 4</Text> is overdue. Please settle immediately.</Text>}
-                        time="2m ago"
-                        isRead={false}
-                    />
-
-                    <NotificationItem
-                        type="success"
-                        title="It's Your Turn!"
-                        message=""
-                        richMessage={<Text>You are the winner of this month's payout. Total amount: <Text style={styles.primaryHighlight}>25,000 ETB</Text>.</Text>}
-                        time="5h ago"
-                        isRead={false}
-                    />
-
-                    {/* Yesterday Section */}
-                    <View style={[styles.sectionHeader, { marginTop: 12 }]}>
-                        <Text style={styles.sectionTitle}>YESTERDAY</Text>
-                    </View>
-
-                    <NotificationItem
-                        type="warning"
-                        title="Contribution Due Soon"
-                        message="Reminder: 500 ETB is due tomorrow for 'Addis Friends Equb'."
-                        time="1d ago"
-                        isRead={true}
-                    />
-
-                    <NotificationItem
-                        type="info"
-                        title="New Member Joined"
-                        message="Selam has joined the 'Family Savings' group. Say hello!"
-                        time="1d ago"
-                        isRead={true}
-                    />
-
-                    <View style={{ height: 100 }} />
-                </ScrollView>
+                ) : (
+                    <ScrollView style={styles.contentList} contentContainerStyle={styles.listContainer}>
+                        {filtered.length === 0 ? (
+                            <View style={styles.emptyContainer}>
+                                <Text style={styles.emptyText}>No notifications found for this filter.</Text>
+                            </View>
+                        ) : (
+                            filtered.map((item) => (
+                                <NotificationItem
+                                    key={item.id}
+                                    type={getNotificationTypeEmoji(item.type)}
+                                    title={item.type.replace(/_/g, ' ')}
+                                    message={item.message}
+                                    time={new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    isRead={true}
+                                />
+                            ))
+                        )}
+                        <View style={{ height: 100 }} />
+                    </ScrollView>
+                )}
             </View>
         </SafeAreaView>
     );
@@ -334,5 +337,16 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#64748b', // slate-500
         fontWeight: '500',
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 100,
+    },
+    emptyText: {
+        color: '#94a3b8',
+        fontSize: 14,
+        textAlign: 'center',
     },
 });

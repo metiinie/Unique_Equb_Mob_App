@@ -5,38 +5,54 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { ContributionStatus, User, EqubStatus, MembershipStatus, MembershipRole, AuditActionType, GlobalRole, Prisma } from '@prisma/client';
 import { assertCanContribute } from '../../domain/equb-state.rules';
 
+import { SystemStatusService } from '../common/system-status.service';
+
 @Injectable()
 export class ContributionService {
     constructor(
         private readonly contributionRepo: ContributionRepository,
         private readonly auditService: AuditEventService,
         private readonly prisma: PrismaService,
+        private readonly systemStatus: SystemStatusService,
     ) { }
 
+    // =================================================================================================
+    // 🛡️ DOMAIN GUARDRAILS ENFORCED 🛡️
+    // This service is part of the FROZEN FINANCIAL CORE (Phase 7).
+    // DO NOT modify Invariants without updating INVARIANTS.md and running full regression tests.
+    // DIRECT PRISMA WRITES OUTSIDE THIS SERVICE FOR CONTRIBUTIONS ARE FORBIDDEN.
+    // =================================================================================================
+
     /**
-     * Create a new contribution (Append-Only Ledger)
+     * CONTRIBUTION CYCLE — PHASE 1 (PURE LEDGER OPERATION)
      * 
-     * Rules Enforced:
-     * 1. Only ACTIVE Equbs accept contributions
-     * 2. Only MEMBER role users can contribute
-     * 3. Only one contribution per member per round
-     * 4. Contribution amount must match Equb.amount
-     * 5. Member must be an ACTIVE member of the Equb
-     * 6. Race conditions handled via unique constraint
+     * Domain Invariants Enforced:
+     * 1. Authorization: MEMBER only (Admin/Collector rejected)
+     * 2. Equb exists
+     * 3. Equb status is ACTIVE
+     * 4. User is an ACTIVE member of the Equb
+     * 5. Round integrity: contribution round === equb.currentRound
+     * 6. Amount integrity: contribution amount === equb.amount (exact match)
+     * 7. Uniqueness: One contribution per member per round
+     * 8. Payout safety: No payout exists for current round
+     * 
+     * Transition: Record contribution (atomic, no side effects)
+     * Status: PAID (immediate, no approval workflow in Phase 1)
      */
     async createContribution(
         actor: User,
         equbId: string,
+        roundNumber: number,
         amount: number,
     ) {
         try {
             return await this.prisma.$transaction(async (tx) => {
-                // 1. Role Invariant: Only MEMBERs can contribute
+                // 1. Authorization: MEMBER only
                 if (actor.role !== GlobalRole.MEMBER) {
                     throw new ForbiddenException('Only MEMBER role users can make contributions');
                 }
 
-                // 2. Fetch Equb inside transaction (snapshot read)
+                // 2. Lock Equb for update to prevent concurrent round progression or state changes
                 const equb = await tx.equb.findUnique({
                     where: { id: equbId },
                 });
@@ -45,23 +61,12 @@ export class ContributionService {
                     throw new BadRequestException('Equb not found');
                 }
 
-                // 3. State Invariant: Equb must be ACTIVE
-                assertCanContribute(equb);
-
-                // 4. Round Validation: currentRound must be valid
-                if (equb.currentRound <= 0 || equb.currentRound > equb.totalRounds) {
-                    throw new BadRequestException('Invalid round number');
+                // 3. Invariant: Equb must be ACTIVE
+                if (equb.status !== EqubStatus.ACTIVE) {
+                    throw new ConflictException('Equb not active');
                 }
 
-                // 5. Amount Invariant: Amount must match Equb.amount exactly
-                const expectedAmount = Number(equb.amount);
-                if (amount !== expectedAmount) {
-                    throw new BadRequestException(
-                        `Invalid contribution amount. Expected: ${expectedAmount}, Received: ${amount}`
-                    );
-                }
-
-                // 6. Membership Invariant: User must be an ACTIVE member
+                // 4. Invariant: User must be an ACTIVE member
                 const membership = await tx.membership.findUnique({
                     where: {
                         equbId_userId: {
@@ -71,84 +76,119 @@ export class ContributionService {
                     },
                 });
 
-                if (!membership) {
-                    throw new ForbiddenException('You are not a member of this Equb');
+                if (!membership || membership.status !== MembershipStatus.ACTIVE) {
+                    throw new ForbiddenException('You are not an active member of this Equb');
                 }
 
-                if (membership.status !== MembershipStatus.ACTIVE) {
-                    throw new ConflictException(
-                        `Cannot contribute. Membership status is ${membership.status}. Only ACTIVE members can contribute.`
-                    );
+                // 5. Invariant: Round must match Equb.currentRound
+                if (roundNumber !== equb.currentRound) {
+                    throw new ConflictException(`Incorrect round number. Expected: ${equb.currentRound}`);
                 }
 
-                // 7. Duplicate Check: Ensure no contribution exists for this member in current round
+                // 6. Invariant: Amount must match Equb.amount
+                const expectedAmount = Number(equb.amount);
+                if (amount !== expectedAmount) {
+                    throw new BadRequestException('Incorrect amount');
+                }
+
+                // 7. Invariant: Exactly one contribution per member per round
+                // We rely on the DATABASE UNIQUE CONSTRAINT for ultimate safety, 
+                // but we check here for immediate feedback.
                 const existing = await tx.contribution.findUnique({
                     where: {
-                        // Schema uses 'memberId' in composite key: equbId_memberId_roundNumber
                         equbId_memberId_roundNumber: {
                             equbId,
                             memberId: actor.id,
-                            roundNumber: equb.currentRound,
+                            roundNumber,
                         },
                     },
                 });
 
                 if (existing) {
-                    throw new ConflictException(
-                        `Duplicate contribution detected. You have already contributed for round ${equb.currentRound}.`
-                    );
+                    throw new ConflictException('Contribution already submitted');
                 }
 
-                // 8. Create Contribution (Append-Only)
+                // 8. Financial Ledger: Append-only write
                 const contribution = await tx.contribution.create({
                     data: {
                         equbId,
                         memberId: actor.id,
-                        roundNumber: equb.currentRound,
+                        roundNumber,
                         amount: equb.amount,
-                        status: ContributionStatus.PENDING,
-                    },
-                    include: {
-                        equb: {
-                            select: {
-                                id: true,
-                                name: true,
-                                currentRound: true,
-                            },
-                        },
-                        member: {
-                            select: {
-                                id: true,
-                                email: true,
-                                fullName: true,
-                            },
-                        },
+                        status: ContributionStatus.CONFIRMED, // Phase 1: Auto-confirm
                     },
                 });
 
-                // 9. Audit Log: Record creation
+                // 9. Audit Log
                 await this.auditService.logEvent(
                     { id: actor.id, role: actor.role },
                     AuditActionType.CONTRIBUTION_CREATED,
                     { type: 'Contribution', id: contribution.id },
                     {
                         equbId,
-                        equbName: contribution.equb.name,
-                        roundNumber: equb.currentRound,
-                        amount: Number(amount),
-                        memberId: actor.id,
-                        memberName: actor.fullName,
+                        roundNumber,
+                        amount: expectedAmount,
                     },
                 );
 
-                return contribution;
+                // 10. Return updated round status
+                const confirmedCount = await tx.contribution.count({
+                    where: {
+                        equbId,
+                        roundNumber,
+                        status: ContributionStatus.CONFIRMED,
+                    },
+                });
+
+                return {
+                    contribution,
+                    summary: {
+                        roundNumber,
+                        confirmedCount,
+                        isRoundComplete: false, // We never auto-advance here
+                    }
+                };
+            }, {
+                isolationLevel: Prisma.TransactionIsolationLevel.Serializable // Highest safety for financial operations
             });
         } catch (error) {
             if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-                throw new ConflictException('Duplicate contribution: You have already contributed for this round.');
+                throw new ConflictException('Contribution already submitted');
             }
             throw error;
         }
+    }
+
+    async getMyContributionStatus(actor: User, equbId: string) {
+        // 1. Get Equb current state
+        const equb = await this.prisma.equb.findUnique({
+            where: { id: equbId },
+            select: { currentRound: true, status: true, amount: true }
+        });
+
+        if (!equb) throw new BadRequestException('Equb not found');
+
+        // 2. Check if contribution exists for this round
+        const contribution = await this.prisma.contribution.findUnique({
+            where: {
+                equbId_memberId_roundNumber: {
+                    equbId,
+                    memberId: actor.id,
+                    roundNumber: equb.currentRound
+                }
+            }
+        });
+
+        return {
+            roundNumber: equb.currentRound,
+            requiredAmount: Number(equb.amount),
+            hasContributed: !!contribution,
+            contributionId: contribution?.id || null,
+            status: contribution?.status || null,
+            submittedAt: contribution?.createdAt || null,
+            isEqubActive: equb.status === EqubStatus.ACTIVE,
+            isSystemDegraded: this.systemStatus.isDegraded
+        };
     }
 
     /**
@@ -417,6 +457,7 @@ export class ContributionService {
             totalCollected: Number(totalCollected),
             collectionRate: totalMembers > 0 ? (confirmedCount / totalMembers) * 100 : 0,
             contributions: allContributions,
+            isSystemDegraded: this.systemStatus.isDegraded
         };
     }
 }

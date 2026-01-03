@@ -35,6 +35,15 @@ export class ApiClient {
             console.log(`[ApiClient] Response: ${response.status} ${url}`, text);
 
             if (!response.ok) {
+                // AUTH HARDENING 1: Classify HTTP Status Codes
+                if (response.status === 401 || response.status === 403) {
+                    throw new Error('UNAUTHENTICATED');
+                }
+
+                if (response.status >= 500) {
+                    throw new Error('Server error. Please try again later.');
+                }
+
                 let errorMessage = text;
                 try {
                     const errorJson = JSON.parse(text);
@@ -51,10 +60,24 @@ export class ApiClient {
                 return text as unknown as T;
             }
         } catch (error: any) {
-            console.error(`[ApiClient] CRITICAL FAILURE: ${method} ${url}`, {
-                message: error.message,
-                stack: error.stack
-            });
+            // AUTH HARDENING 1: Filter Logs
+            const isAuthError = error.message === 'UNAUTHENTICATED';
+            const isNetworkError = error.message === 'Network request failed' || error.message.includes('fetch');
+
+            if (!isAuthError && !isNetworkError) {
+                console.error(`[ApiClient] CRITICAL FAILURE: ${method} ${url}`, {
+                    message: error.message,
+                    stack: error.stack
+                });
+            } else {
+                console.warn(`[ApiClient] Handled Failure: ${error.message}`);
+            }
+
+            // TRUTHFUL ERROR HANDLING
+            if (isNetworkError) {
+                throw new Error('Server unavailable. Please retry.');
+            }
+
             throw error;
         }
     }

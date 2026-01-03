@@ -1,15 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useEqubContext } from '../../application/equb/equb_context';
-
-// Shared Home Header Component
-// Used across Admin, Collector, and Member home dashboards
-// Displays active Equb name from global context
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface HomeHeaderProps {
     userName: string;
     greeting: string;
-    roleLabel?: string; // Optional: "COLLECTOR", "ADMIN", etc.
+    roleLabel: string;
     onNotificationPress?: () => void;
 }
 
@@ -19,28 +15,31 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
     roleLabel,
     onNotificationPress
 }) => {
-    const { activeEqubName } = useEqubContext();
-
     return (
         <View style={styles.container}>
-            {/* User Profile Section */}
-            <View style={styles.profileSection}>
-                <View style={styles.avatarContainer}>
-                    <View style={styles.avatar} />
-                    <View style={styles.statusDot} />
+            <View style={styles.leftSection}>
+                <View style={styles.avatarWrapper}>
+                    <LinearGradient
+                        colors={['#2b6cee', '#4f83f1']}
+                        style={styles.avatar}
+                    >
+                        <Text style={styles.avatarInitial}>
+                            {userName.charAt(0).toUpperCase()}
+                        </Text>
+                    </LinearGradient>
+                    <View style={styles.activeDot} />
                 </View>
-                <View>
-                    {roleLabel && <Text style={styles.roleLabel}>{roleLabel}</Text>}
+                <View style={styles.textWrapper}>
+                    <Text style={styles.roleLabel}>{roleLabel}</Text>
                     <Text style={styles.userName}>{userName}</Text>
-                    {!roleLabel && <Text style={styles.greeting}>{greeting}</Text>}
                 </View>
             </View>
 
-            {/* Notification Button */}
             <TouchableOpacity
                 style={styles.notificationBtn}
                 onPress={onNotificationPress}
             >
+                <View style={styles.notificationIndicator} />
                 <Text style={styles.bellIcon}>🔔</Text>
             </TouchableOpacity>
         </View>
@@ -52,31 +51,36 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        paddingBottom: 8,
-        backgroundColor: 'rgba(16, 22, 34, 0.9)',
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 16,
     },
-    profileSection: {
+    leftSection: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        gap: 14,
     },
-    avatarContainer: {
+    avatarWrapper: {
         position: 'relative',
     },
     avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#2b6cee',
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
         borderWidth: 2,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: 'rgba(255, 255, 255, 0.15)',
     },
-    statusDot: {
+    avatarInitial: {
+        color: '#ffffff',
+        fontSize: 20,
+        fontWeight: '800',
+    },
+    activeDot: {
         position: 'absolute',
-        bottom: 0,
-        right: 0,
+        bottom: 2,
+        right: 2,
         width: 12,
         height: 12,
         borderRadius: 6,
@@ -84,31 +88,46 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#101622',
     },
+    textWrapper: {
+        gap: 2,
+    },
     roleLabel: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#64748b',
-        letterSpacing: 1,
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#2b6cee',
+        letterSpacing: 1.2,
         textTransform: 'uppercase',
     },
     userName: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 20,
+        fontWeight: '800',
         color: '#ffffff',
-    },
-    greeting: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#94a3b8',
+        letterSpacing: -0.5,
     },
     notificationBtn: {
-        width: 40,
-        height: 40,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
         justifyContent: 'center',
         alignItems: 'center',
-        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        position: 'relative',
+    },
+    notificationIndicator: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#ef4444',
+        zIndex: 1,
+        borderWidth: 1.5,
+        borderColor: '#101622',
     },
     bellIcon: {
-        fontSize: 20,
+        fontSize: 18,
     },
 });

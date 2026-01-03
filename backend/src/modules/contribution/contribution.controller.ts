@@ -15,6 +15,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CreateContributionDto } from './dtos/create-contribution.dto';
 import { RejectContributionDto } from './dtos/reject-contribution.dto';
 import { GetContributionsQueryDto } from './dtos/get-contributions-query.dto';
+import { FinancialWrite } from '../../common/guards/system-safety.guard';
 
 /**
  * Contribution Controller
@@ -32,30 +33,48 @@ export class ContributionController {
     constructor(private readonly contributionService: ContributionService) { }
 
     /**
-     * POST /equbs/:id/contribute
+     * [FINANCIAL_WRITE]
+     * POST /equbs/:id/contributions
      * 
-     * Create a new contribution for the current round
+     * Create a new contribution for a specific round (Phase 1)
      * 
      * Access: MEMBER only
      * 
      * Response Codes:
      * - 201: Contribution created successfully
-     * - 400: Invalid amount, duplicate contribution, or inactive Equb
+     * - 400: Invalid amount or round number
      * - 403: Not a MEMBER or not an active member of the Equb
      * - 404: Equb not found
+     * - 409: Duplicate contribution, invalid round, or payout exists
      */
-    @Post('equbs/:id/contribute')
+    @Post('equbs/:id/contributions')
     @Roles(GlobalRole.MEMBER)
+    @FinancialWrite()
     @HttpCode(HttpStatus.CREATED)
     async contribute(
         @CurrentUser() user: User,
         @Param('id') equbId: string,
         @Body() dto: CreateContributionDto,
     ) {
-        return this.contributionService.createContribution(user, equbId, dto.amount);
+        return this.contributionService.createContribution(user, equbId, dto.roundNumber, dto.amount);
     }
 
     /**
+     * [READ_ONLY]
+     * GET /equbs/:id/my-contribution-status
+     * Check if current user has contributed for current round
+     */
+    @Get('equbs/:id/my-contribution-status')
+    @Roles(GlobalRole.MEMBER)
+    async getMyContributionStatus(
+        @CurrentUser() user: User,
+        @Param('id') equbId: string,
+    ) {
+        return this.contributionService.getMyContributionStatus(user, equbId);
+    }
+
+    /**
+     * [FINANCIAL_WRITE]
      * POST /contributions/:id/confirm
      * 
      * Confirm a pending contribution
@@ -70,6 +89,7 @@ export class ContributionController {
      */
     @Post('contributions/:id/confirm')
     @Roles(GlobalRole.ADMIN, GlobalRole.COLLECTOR)
+    @FinancialWrite()
     @HttpCode(HttpStatus.OK)
     async confirmContribution(
         @CurrentUser() user: User,
@@ -79,6 +99,7 @@ export class ContributionController {
     }
 
     /**
+     * [FINANCIAL_WRITE]
      * POST /contributions/:id/reject
      * 
      * Reject a pending contribution with a reason
@@ -93,6 +114,7 @@ export class ContributionController {
      */
     @Post('contributions/:id/reject')
     @Roles(GlobalRole.ADMIN, GlobalRole.COLLECTOR)
+    @FinancialWrite()
     @HttpCode(HttpStatus.OK)
     async rejectContribution(
         @CurrentUser() user: User,
@@ -103,6 +125,7 @@ export class ContributionController {
     }
 
     /**
+     * [READ_ONLY]
      * GET /equbs/:id/contributions?round=n
      * 
      * Get contributions for an Equb
@@ -130,6 +153,7 @@ export class ContributionController {
     }
 
     /**
+     * [READ_ONLY]
      * GET /contributions/my
      * 
      * Get current user's contributions across all Equbs
@@ -145,6 +169,7 @@ export class ContributionController {
     }
 
     /**
+     * [READ_ONLY]
      * GET /equbs/:id/round-summary/:round
      * 
      * Get detailed summary of contributions for a specific round

@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ApiClient } from '../services/api_client';
 import { useAuth } from '../../application/auth/auth_context';
+import { useNotifications } from '../../application/notification/notification_context';
 import { HomeHeader } from '../components/HomeHeader';
-import { EqubHeadline } from '../components/EqubHeadline';
+import { Theme } from '../theme';
 
 export const MemberHomeView = ({ navigation }: { navigation: any }) => {
     const { user } = useAuth();
+    const { pendingContributions } = useNotifications();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -26,7 +28,11 @@ export const MemberHomeView = ({ navigation }: { navigation: any }) => {
         fetchDashboard();
     }, []);
 
-    if (loading) return null;
+    if (loading || !user) return (
+        <View style={styles.loadingContainer}>
+            <Text style={{ color: '#fff' }}>Hydrating your experience...</Text>
+        </View>
+    );
 
     const hasEqubs = data?.myEqubs && data.myEqubs.length > 0;
     const primaryEqub = hasEqubs ? data.myEqubs[0] : null;
@@ -36,82 +42,140 @@ export const MemberHomeView = ({ navigation }: { navigation: any }) => {
             <StatusBar style="light" />
             <View style={styles.container}>
                 <HomeHeader
-                    userName={user?.fullName || 'Member'}
-                    greeting="Welcome to Unique Equb"
-                    onNotificationPress={() => navigation.navigate('NotificationCenterScreen')}
+                    userName={user.fullName}
+                    roleLabel={user.role}
+                    greeting="Your Personal Savings Hub"
+                    onNotificationPress={() => navigation.navigate('NotificationCenter')}
                 />
 
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                    {!hasEqubs ? (
-                        <View style={styles.emptyStateContainer}>
-                            <Text style={styles.emptyStateIcon}>🌱</Text>
-                            <Text style={styles.emptyStateTitle}>No Active Equbs</Text>
-                            <Text style={styles.emptyStateText}>
-                                You haven't joined any Equbs yet. Once you're added to an Equb by an administrator, your position and contributions will appear here.
-                            </Text>
-                        </View>
-                    ) : (
-                        <>
-                            <EqubHeadline metadata={`${primaryEqub.name} • Round ${primaryEqub.currentRound}`} />
-
-                            <View style={styles.heroCardContainer}>
-                                <View style={styles.heroCard}>
-                                    <LinearGradient
-                                        colors={['#1e293b', '#0f172a']}
-                                        style={styles.heroOverlay}
-                                    >
-                                        <View style={styles.heroContent}>
-                                            <View style={styles.heroTop}>
-                                                <View style={styles.statusBadge}>
-                                                    <View style={styles.statusPulse} />
-                                                    <Text style={styles.statusText}>{primaryEqub.status}</Text>
-                                                </View>
-                                            </View>
-                                            <View style={styles.heroBottom}>
-                                                <Text style={styles.contributionLabel}>Active Equb</Text>
-                                                <Text style={styles.contributionAmount}>{primaryEqub.name}</Text>
-                                            </View>
-                                        </View>
-                                    </LinearGradient>
+                    {/* Truthful Identity Hero - Matching Profile Standard */}
+                    <View style={styles.heroSection}>
+                        <LinearGradient
+                            colors={['#1e293b', '#101622']}
+                            style={styles.identityCard}
+                        >
+                            <View style={styles.identityInfo}>
+                                <Text style={styles.memberSince}>Member Since {new Date(user.createdAt).toLocaleDateString()}</Text>
+                                <Text style={styles.heroGreeting}>Welcome back, {user.fullName.split(' ')[0]}</Text>
+                            </View>
+                            <View style={styles.identityStatus}>
+                                <View style={styles.statusChip}>
+                                    <Text style={styles.statusChipText}>ACTIVE POSITION</Text>
                                 </View>
                             </View>
+                        </LinearGradient>
+                    </View>
 
-                            <View style={styles.section}>
+                    {pendingContributions.length > 0 && (
+                        <View style={styles.alertSection}>
+                            <TouchableOpacity
+                                style={styles.alertCard}
+                                onPress={() => navigation.navigate('ContributionCapture', { equbId: pendingContributions[0].equbId })}
+                            >
+                                <View style={styles.alertIconWrapper}>
+                                    <Text style={styles.alertIcon}>⚠️</Text>
+                                </View>
+                                <View style={styles.alertContent}>
+                                    <Text style={styles.alertTitle}>Action Required</Text>
+                                    <Text style={styles.alertMessage}>
+                                        Contribution for {pendingContributions[0].equbName} is due.
+                                    </Text>
+                                </View>
+                                <Text style={styles.alertAction}>PAY NOW</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {!hasEqubs ? (
+                        <View style={styles.emptyStateContainer}>
+                            <View style={styles.emptyIconWrapper}>
+                                <Text style={styles.emptyStateIcon}>🌱</Text>
+                            </View>
+                            <Text style={styles.emptyStateTitle}>No Active Equbs Found</Text>
+                            <Text style={styles.emptyStateText}>
+                                You are not part of any Equb yet. Join an Equb to start saving and participating in rotating payouts with your community.
+                            </Text>
+                            <TouchableOpacity style={styles.exploreBtn} onPress={() => { }}>
+                                <Text style={styles.exploreBtnText}>Explore Circles</Text>
+                                <Text style={styles.btnIcon}>🔍</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <View style={styles.dashboardContent}>
+                            {/* Primary Equb Card */}
+                            <Text style={styles.sectionTitle}>Your Active Equb</Text>
+                            <TouchableOpacity
+                                style={styles.equbCard}
+                                activeOpacity={0.9}
+                                onPress={() => navigation.navigate('My Equb')}
+                            >
+                                <LinearGradient
+                                    colors={['#2b6cee', '#1e3a8a']}
+                                    style={styles.equbCardGradient}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                >
+                                    <View style={styles.cardHeader}>
+                                        <View>
+                                            <Text style={styles.cardEqubName}>{primaryEqub.name}</Text>
+                                            <Text style={styles.cardEqubMeta}>{primaryEqub.frequency} • {primaryEqub.amount.toLocaleString()} ETB</Text>
+                                        </View>
+                                        <View style={styles.cardStatusBadge}>
+                                            <Text style={styles.cardStatusText}>{primaryEqub.status}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.cardProgress}>
+                                        <View style={styles.progressLabelRow}>
+                                            <Text style={styles.progressLabel}>Round {primaryEqub.currentRound} of {primaryEqub.totalRounds}</Text>
+                                            <Text style={styles.progressPercent}>{Math.round((primaryEqub.currentRound / primaryEqub.totalRounds) * 100)}%</Text>
+                                        </View>
+                                        <View style={styles.progressBarBg}>
+                                            <View style={[styles.progressBarFill, { width: `${(primaryEqub.currentRound / primaryEqub.totalRounds) * 100}%` }]} />
+                                        </View>
+                                    </View>
+                                </LinearGradient>
+                            </TouchableOpacity>
+
+                            {/* Recent Activity */}
+                            <View style={styles.activitySection}>
                                 <View style={styles.activityHeader}>
                                     <Text style={styles.sectionTitle}>Recent Activity</Text>
+                                    <TouchableOpacity onPress={() => navigation.navigate('Activities')}>
+                                        <Text style={styles.seeAllText}>See All</Text>
+                                    </TouchableOpacity>
                                 </View>
+
                                 <View style={styles.activityList}>
                                     {data.recentContributions.length === 0 && data.executedPayouts.length === 0 ? (
-                                        <Text style={styles.emptyActivityText}>No recent activity found.</Text>
+                                        <Text style={styles.emptyActivityText}>Your financial activity will appear here.</Text>
                                     ) : (
                                         <>
-                                            {data.recentContributions.map((c: any) => (
+                                            {data.recentContributions.slice(0, 3).map((c: any) => (
                                                 <View key={c.id} style={styles.activityItem}>
-                                                    <View style={[styles.activityIcon, styles.activityIconGreen]}>
-                                                        <Text style={styles.activityIconText}>💰</Text>
+                                                    <View style={[styles.activityIcon, { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
+                                                        <Text style={styles.activityEmoji}>💰</Text>
                                                     </View>
-                                                    <View style={styles.activityContent}>
+                                                    <View style={styles.activityInfo}>
                                                         <Text style={styles.activityTitle}>Contribution {c.status}</Text>
-                                                        <Text style={styles.activityDesc}>Round {c.roundNumber} • {new Date(c.createdAt).toLocaleDateString()}</Text>
+                                                        <Text style={styles.activityMeta}>Round {c.roundNumber} • {new Date(c.createdAt).toLocaleDateString()}</Text>
                                                     </View>
-                                                    <View style={styles.activityAmount}>
-                                                        <Text style={styles.activityAmountValue}>{c.amount}</Text>
-                                                        <Text style={styles.activityAmountCurrency}>ETB</Text>
+                                                    <View style={styles.activityAction}>
+                                                        <Text style={styles.activityAmount}>{c.amount.toLocaleString()} ETB</Text>
                                                     </View>
                                                 </View>
                                             ))}
-                                            {data.executedPayouts.map((p: any, idx: number) => (
-                                                <View key={idx} style={styles.activityItem}>
-                                                    <View style={[styles.activityIcon, styles.activityIconBlue]}>
-                                                        <Text style={styles.activityIconText}>🏆</Text>
+                                            {data.executedPayouts.slice(0, 2).map((p: any, idx: number) => (
+                                                <View key={`p-${idx}`} style={styles.activityItem}>
+                                                    <View style={[styles.activityIcon, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
+                                                        <Text style={styles.activityEmoji}>🏆</Text>
                                                     </View>
-                                                    <View style={styles.activityContent}>
-                                                        <Text style={styles.activityTitle}>Payout Disbursed</Text>
-                                                        <Text style={styles.activityDesc}>{p.equbName} • Round {p.round}</Text>
+                                                    <View style={styles.activityInfo}>
+                                                        <Text style={styles.activityTitle}>Payout Received</Text>
+                                                        <Text style={styles.activityMeta}>{p.equbName} • {new Date(p.date).toLocaleDateString()}</Text>
                                                     </View>
-                                                    <View style={styles.activityAmount}>
-                                                        <Text style={styles.activityAmountValue}>{p.amount}</Text>
-                                                        <Text style={styles.activityAmountCurrency}>ETB</Text>
+                                                    <View style={styles.activityAction}>
+                                                        <Text style={[styles.activityAmount, { color: '#3b82f6' }]}>{p.amount.toLocaleString()} ETB</Text>
                                                     </View>
                                                 </View>
                                             ))}
@@ -119,9 +183,9 @@ export const MemberHomeView = ({ navigation }: { navigation: any }) => {
                                     )}
                                 </View>
                             </View>
-                        </>
+                        </View>
                     )}
-                    <View style={{ height: 40 }} />
+                    <View style={{ height: 100 }} />
                 </ScrollView>
             </View>
         </SafeAreaView>
@@ -129,273 +193,178 @@ export const MemberHomeView = ({ navigation }: { navigation: any }) => {
 };
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: '#101622',
+    safeArea: { flex: 1, backgroundColor: '#101622' },
+    container: { flex: 1 },
+    loadingContainer: { flex: 1, backgroundColor: '#101622', justifyContent: 'center', alignItems: 'center' },
+    scrollContent: { paddingBottom: 20 },
+    /* Hero Identity */
+    heroSection: {
+        paddingHorizontal: 20,
+        marginTop: 8,
+        marginBottom: 24,
     },
-    container: {
-        flex: 1,
-        backgroundColor: '#101622',
-    },
-    header: {
+    identityCard: {
+        padding: 24,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        paddingBottom: 8,
-        backgroundColor: 'rgba(16, 22, 34, 0.9)',
     },
-    profileSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
+    identityInfo: {
+        gap: 6,
     },
-    avatarContainer: {
-        position: 'relative',
-    },
-    avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#2b6cee',
-        borderWidth: 2,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-    },
-    statusDot: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: '#22c55e',
-        borderWidth: 2,
-        borderColor: '#101622',
-    },
-    greeting: {
-        fontSize: 18,
+    memberSince: {
+        fontSize: 10,
         fontWeight: '700',
-        color: '#ffffff',
+        color: '#64748b',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
-    timeGreeting: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#94a3b8',
-    },
-    notificationBtn: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: 20,
-    },
-    bellIcon: {
-        fontSize: 20,
-    },
-    scrollContent: {
-        paddingBottom: 24,
-    },
-    /* Headline */
-    headlineSection: {
-        paddingHorizontal: 16,
-        paddingTop: 8,
-    },
-    equbTitle: {
-        fontSize: 24,
-        fontWeight: '700',
+    heroGreeting: {
+        fontSize: 22,
+        fontWeight: '800',
         color: '#ffffff',
         letterSpacing: -0.5,
     },
-    equbMeta: {
-        fontSize: 14,
-        color: '#94a3b8',
-        marginTop: 4,
+    identityStatus: {
+        alignItems: 'flex-end',
     },
-    /* Hero Card */
-    heroCardContainer: {
-        padding: 16,
-    },
-    heroCard: {
-        borderRadius: 12,
-        overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-        elevation: 8,
-    },
-    heroBackground: {
-        width: '100%',
-        minHeight: 180,
-    },
-    heroBackgroundImage: {
-        borderRadius: 12,
-    },
-    heroOverlay: {
-        flex: 1,
-        padding: 20,
-    },
-    heroContent: {
-        flex: 1,
-        justifyContent: 'space-between',
-    },
-    heroTop: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-    },
-    statusBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
+    statusChip: {
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
         paddingHorizontal: 10,
         paddingVertical: 4,
-        borderRadius: 99,
-        backgroundColor: 'rgba(34, 197, 94, 0.2)',
-        borderWidth: 1,
-        borderColor: 'rgba(34, 197, 94, 0.3)',
-    },
-    statusPulse: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: '#22c55e',
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#22c55e',
-        letterSpacing: 1,
-    },
-    walletIcon: {
-        fontSize: 20,
-        opacity: 0.5,
-    },
-    heroBottom: {
-        gap: 16,
-    },
-    contributionLabel: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#cbd5e1',
-        marginBottom: 4,
-    },
-    contributionAmount: {
-        fontSize: 30,
-        fontWeight: '700',
-        color: '#ffffff',
-        letterSpacing: -1,
-    },
-    dueRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginTop: 4,
-    },
-    calendarIcon: {
-        fontSize: 14,
-    },
-    dueText: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: 'rgba(255, 255, 255, 0.8)',
-    },
-    payNowBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        height: 48,
-        backgroundColor: '#2b6cee',
         borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(34, 197, 94, 0.2)',
     },
-    payNowText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#ffffff',
-        letterSpacing: 0.5,
+    statusChipText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#22c55e',
     },
-    arrowIcon: {
-        fontSize: 18,
-        color: '#ffffff',
+    /* Alerts */
+    alertSection: {
+        paddingHorizontal: 20,
+        marginBottom: 24,
     },
-    /* Section */
-    section: {
-        paddingHorizontal: 16,
-        marginTop: 24,
+    alertCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(249, 115, 22, 0.2)',
+        gap: 12,
+    },
+    alertIconWrapper: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    alertIcon: { fontSize: 20 },
+    alertContent: { flex: 1, gap: 2 },
+    alertTitle: { fontSize: 14, fontWeight: '800', color: '#f97316' },
+    alertMessage: { fontSize: 12, color: '#f97316', opacity: 0.9 },
+    alertAction: { fontSize: 12, fontWeight: '900', color: '#f97316', letterSpacing: 0.5 },
+    /* Dashboard Content */
+    dashboardContent: {
+        paddingHorizontal: 20,
     },
     sectionTitle: {
         fontSize: 18,
-        fontWeight: '700',
+        fontWeight: '800',
         color: '#ffffff',
-        marginBottom: 12,
+        marginBottom: 16,
+        letterSpacing: -0.3,
     },
-    /* Position Card */
-    positionCard: {
-        backgroundColor: '#1a2230',
-        padding: 20,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#1e293b',
+    /* Equb Card */
+    equbCard: {
+        borderRadius: 20,
+        overflow: 'hidden',
+        marginBottom: 32,
+        elevation: 10,
+        shadowColor: '#2b6cee',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 15,
     },
-    positionHeader: {
+    equbCardGradient: {
+        padding: 24,
+    },
+    cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'flex-end',
-        marginBottom: 12,
+        alignItems: 'flex-start',
+        marginBottom: 24,
     },
-    positionRound: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#2b6cee',
+    cardEqubName: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#ffffff',
+        letterSpacing: -0.5,
     },
-    positionTotal: {
+    cardEqubMeta: {
         fontSize: 14,
-        fontWeight: '400',
-        color: '#64748b',
+        color: 'rgba(255, 255, 255, 0.7)',
+        marginTop: 4,
     },
-    groupIcon: {
-        fontSize: 20,
-        color: '#2b6cee',
+    cardStatusBadge: {
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
     },
-    progressBarContainer: {
-        marginBottom: 12,
+    cardStatusText: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: '#ffffff',
+        textTransform: 'uppercase',
     },
-    progressBarBg: {
-        width: '100%',
-        height: 12,
-        backgroundColor: '#334155',
-        borderRadius: 6,
-        overflow: 'hidden',
+    cardProgress: {
+        gap: 12,
     },
-    progressBarFill: {
-        height: '100%',
-        backgroundColor: '#2b6cee',
-        borderRadius: 6,
-    },
-    positionFooter: {
+    progressLabelRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
     },
-    positionLabel: {
-        fontSize: 14,
-        color: '#94a3b8',
-    },
-    positionDate: {
+    progressLabel: {
         fontSize: 14,
         fontWeight: '600',
         color: '#ffffff',
     },
-    /* Activity */
+    progressPercent: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#ffffff',
+    },
+    progressBarBg: {
+        height: 10,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 5,
+        overflow: 'hidden',
+    },
+    progressBarFill: {
+        height: '100%',
+        backgroundColor: '#ffffff',
+        borderRadius: 5,
+    },
+    /* Activity Section */
+    activitySection: {
+        gap: 16,
+    },
     activityHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
     },
-    seeAllBtn: {
+    seeAllText: {
         fontSize: 14,
         fontWeight: '700',
         color: '#2b6cee',
@@ -406,92 +375,91 @@ const styles = StyleSheet.create({
     activityItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 16,
-        backgroundColor: '#1a2230',
+        backgroundColor: '#1c2333',
         padding: 16,
-        borderRadius: 12,
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#1e293b',
-    },
-    activityItemFaded: {
-        opacity: 0.6,
+        borderColor: '#2d3748',
+        gap: 16,
     },
     activityIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    activityIconGreen: {
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-    },
-    activityIconBlue: {
-        backgroundColor: 'rgba(43, 108, 238, 0.1)',
-    },
-    activityIconGray: {
-        backgroundColor: '#334155',
-    },
-    activityIconText: {
-        fontSize: 16,
-    },
-    activityContent: {
-        flex: 1,
-    },
+    activityEmoji: { fontSize: 20 },
+    activityInfo: { flex: 1, gap: 2 },
     activityTitle: {
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: '700',
-        color: '#ffffff',
-        marginBottom: 2,
+        color: '#ffffff'
     },
-    activityDesc: {
+    activityMeta: {
         fontSize: 12,
-        color: '#94a3b8',
+        color: '#64748b'
     },
+    activityAction: { alignItems: 'flex-end' },
     activityAmount: {
-        alignItems: 'flex-end',
-    },
-    activityAmountValue: {
         fontSize: 14,
-        fontWeight: '700',
-        color: '#ffffff',
+        fontWeight: '800',
+        color: '#ffffff'
     },
-    activityAmountCurrency: {
-        fontSize: 12,
-        color: '#64748b',
-    },
-    chevronIcon: {
-        fontSize: 20,
-        color: '#64748b',
-    },
+    /* Empty State */
     emptyStateContainer: {
-        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         padding: 40,
-        marginTop: 60,
+        marginTop: 20,
     },
-    emptyStateIcon: {
-        fontSize: 64,
-        marginBottom: 20,
+    emptyIconWrapper: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
     },
+    emptyStateIcon: { fontSize: 48 },
     emptyStateTitle: {
-        fontSize: 20,
-        fontWeight: '700',
+        fontSize: 22,
+        fontWeight: '800',
         color: '#ffffff',
         marginBottom: 12,
         textAlign: 'center',
+        letterSpacing: -0.5,
     },
     emptyStateText: {
-        fontSize: 14,
+        fontSize: 15,
         color: '#94a3b8',
         textAlign: 'center',
-        lineHeight: 22,
+        lineHeight: 24,
+        marginBottom: 32,
     },
+    exploreBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: '#2b6cee',
+        paddingHorizontal: 24,
+        paddingVertical: 16,
+        borderRadius: 16,
+        elevation: 4,
+    },
+    exploreBtnText: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#ffffff',
+    },
+    btnIcon: { fontSize: 18 },
     emptyActivityText: {
         fontSize: 14,
         color: '#64748b',
         textAlign: 'center',
-        paddingVertical: 20,
+        paddingTop: 20,
     },
 });

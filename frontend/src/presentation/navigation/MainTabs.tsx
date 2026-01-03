@@ -4,7 +4,8 @@ import { Theme } from '../theme';
 import { HomeScreen } from '../home/home_screen';
 import { MyEqubTabScreen } from '../my_equb/MyEqubTabScreen';
 import { ActivitiesTabScreen } from '../activities/ActivitiesTabScreen';
-import { ProfileScreen } from '../profile/UnifiedProfileScreen';
+import { ProfileStack } from './ProfileStack';
+import { TabIcon } from '../components/TabIcon';
 
 const Tab = createBottomTabNavigator();
 
@@ -13,32 +14,45 @@ export const MainTabs = () => {
         <Tab.Navigator
             screenOptions={{
                 headerShown: false,
+                tabBarShowLabel: false, // We render label in TabIcon
                 tabBarStyle: {
-                    backgroundColor: '#1c2333',
-                    borderTopColor: '#2d3748',
+                    backgroundColor: Theme.colors.surface,
+                    borderTopColor: Theme.colors.borderLight,
+                    height: 64, // Sufficient height for icon + label + padding
+                    paddingTop: 8,
                 },
-                tabBarActiveTintColor: '#2b6cee',
-                tabBarInactiveTintColor: '#64748b',
             }}
         >
             <Tab.Screen
-                name="Home"
+                name="Dashboard"
                 component={HomeScreen}
+                options={{
+                    tabBarIcon: ({ focused }) => <TabIcon name="dashboard" label="Dashboard" focused={focused} />
+                }}
             />
 
             <Tab.Screen
                 name="My Equb"
                 component={MyEqubTabScreen}
+                options={{
+                    tabBarIcon: ({ focused }) => <TabIcon name="savings" label="My Equb" focused={focused} />
+                }}
             />
 
             <Tab.Screen
                 name="Activities"
                 component={ActivitiesTabScreen}
+                options={{
+                    tabBarIcon: ({ focused }) => <TabIcon name="swap-horiz" label="Activities" focused={focused} />
+                }}
             />
 
             <Tab.Screen
                 name="Profile"
-                component={ProfileScreen}
+                component={ProfileStack}
+                options={{
+                    tabBarIcon: ({ focused }) => <TabIcon name="person" label="Profile" focused={focused} />
+                }}
             />
         </Tab.Navigator>
     );

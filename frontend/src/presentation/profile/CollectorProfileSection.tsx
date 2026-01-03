@@ -1,35 +1,58 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useProfileHandler } from './useProfileHandler';
+import { ApiClient } from '../services/api_client';
+import { ManagedEqubDto, ManagedSummaryDto } from '../../domain/dtos';
 
-// Pure Section Component: Collector-specific profile content
-// Shows Today's Summary, Quick Actions, and Assigned Equbs for collectors
+interface CollectorProfileSectionProps { }
 
-interface CollectorProfileSectionProps {
-    navigation?: any;
-}
+export const CollectorProfileSection: React.FC<CollectorProfileSectionProps> = () => {
+    const { handleAction } = useProfileHandler();
+    const [equbs, setEqubs] = useState<ManagedEqubDto[]>([]);
+    const [summary, setSummary] = useState<ManagedSummaryDto | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-export const CollectorProfileSection: React.FC<CollectorProfileSectionProps> = ({ navigation }) => {
-    // Hardcoded data matching: profile_screen_(collector_view)
-    const assignedEqubs = [
-        {
-            id: 1,
-            initials: 'MK',
-            name: 'Merkato Traders',
-            meta: 'Round 4 • Daily',
-            status: 'Active',
-            toCollect: '5 Members',
-            initialsBg: 'blue',
-        },
-        {
-            id: 2,
-            initials: 'PL',
-            name: 'Piassa Laptop Sellers',
-            meta: 'Round 12 • Weekly',
-            status: 'Pending',
-            toCollect: '12 Members',
-            initialsBg: 'purple',
-        },
-    ];
+    useEffect(() => {
+        const fetchAll = async () => {
+            try {
+                setLoading(true);
+                const [equbsData, summaryData] = await Promise.all([
+                    ApiClient.get<ManagedEqubDto[]>('/equbs/managed'),
+                    ApiClient.get<any>('/equbs/managed/summary')
+                ]);
+                setEqubs(equbsData);
+                setSummary(summaryData);
+                setError(null);
+            } catch (err: any) {
+                console.error('[CollectorProfileSection] Fetch failed:', err);
+                setError('Failed to load management data');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchAll();
+    }, []);
+
+    const getInitials = (name: string) => {
+        return name
+            .split(' ')
+            .filter(Boolean)
+            .map(word => word[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2);
+    };
+
+    const mapStatus = (status: string) => {
+        switch (status) {
+            case 'ACTIVE': return { label: 'Active', badgeColor: '#22c55e' };
+            case 'DRAFT': return { label: 'Draft', badgeColor: '#3b82f6' };
+            case 'ON_HOLD': return { label: 'Hold', badgeColor: '#eab308' };
+            default: return { label: status, badgeColor: '#94a3b8' };
+        }
+    };
 
     return (
         <>
@@ -39,36 +62,55 @@ export const CollectorProfileSection: React.FC<CollectorProfileSectionProps> = (
                     <View style={styles.summaryHeader}>
                         <Text style={styles.summaryTitle}>Today's Summary</Text>
                         <View style={styles.dateChip}>
-                            <Text style={styles.dateText}>Oct 24, 2023</Text>
+                            <Text style={styles.dateText}>
+                                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </Text>
                         </View>
                     </View>
 
                     <View style={styles.statsRow}>
                         <View style={styles.statCol}>
                             <Text style={styles.statLabel}>Collected</Text>
-                            <Text style={styles.statValueSuccess}>ETB 12,500</Text>
+                            <Text style={styles.statValueSuccess}>ETB {summary?.todayCollected?.toLocaleString() || '0'}</Text>
                         </View>
                         <View style={styles.statCol}>
                             <Text style={styles.statLabel}>Pending</Text>
-                            <Text style={styles.statValueWarning}>ETB 3,000</Text>
+                            <Text style={styles.statValueWarning}>ETB {summary?.todayPending?.toLocaleString() || '0'}</Text>
                         </View>
                     </View>
 
-                    <View style={styles.progressContainer}>
-                        <View style={[styles.progressBar, { width: '80%' }]} />
-                    </View>
-                    <Text style={styles.progressText}>80% of daily target reached</Text>
+                    {summary && (summary.todayCollected + summary.todayPending) > 0 ? (
+                        <>
+                            <View style={styles.progressContainer}>
+                                <View style={[
+                                    styles.progressBar,
+                                    { width: `${Math.min(100, (summary.todayCollected / (summary.todayCollected + summary.todayPending)) * 100)}%` }
+                                ]} />
+                            </View>
+                            <Text style={styles.progressText}>
+                                {Math.round((summary.todayCollected / (summary.todayCollected + summary.todayPending)) * 100)}% collection rate today
+                            </Text>
+                        </>
+                    ) : (
+                        <Text style={styles.progressText}>No collections scheduled for today</Text>
+                    )}
                 </View>
             </View>
 
             {/* Quick Actions */}
             <View style={styles.sectionContainer}>
                 <View style={styles.actionsGrid}>
-                    <TouchableOpacity style={styles.actionScan}>
+                    <TouchableOpacity
+                        style={styles.actionScan}
+                        onPress={() => handleAction('SCAN_COLLECT')}
+                    >
                         <Text style={styles.actionIconScan}>📷</Text>
                         <Text style={styles.actionTextScan}>Scan & Collect</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionManual}>
+                    <TouchableOpacity
+                        style={styles.actionManual}
+                        onPress={() => handleAction('MARK_MANUAL')}
+                    >
                         <Text style={styles.actionIconManual}>📝</Text>
                         <Text style={styles.actionTextManual}>Mark Manually</Text>
                     </TouchableOpacity>
@@ -79,56 +121,75 @@ export const CollectorProfileSection: React.FC<CollectorProfileSectionProps> = (
             <View style={styles.sectionContainer}>
                 <View style={styles.listHeader}>
                     <Text style={styles.listTitle}>Assigned Equbs</Text>
-                    <TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleAction('MANAGED_EQUBS', { managedOnly: true })}>
                         <Text style={styles.viewAllText}>View All</Text>
                     </TouchableOpacity>
                 </View>
 
                 <View style={styles.equbList}>
-                    {assignedEqubs.map((equb) => (
-                        <View key={equb.id} style={styles.equbCard}>
-                            <View style={styles.cardHeader}>
-                                <View style={styles.cardLeft}>
-                                    <View style={[
-                                        styles.initialsBox,
-                                        equb.initialsBg === 'blue' ? styles.bgBlue : styles.bgPurple
-                                    ]}>
-                                        <Text style={[
-                                            styles.initialsText,
-                                            equb.initialsBg === 'blue' ? styles.textBlue : styles.textPurple
-                                        ]}>
-                                            {equb.initials}
-                                        </Text>
-                                    </View>
-                                    <View>
-                                        <Text style={styles.equbName}>{equb.name}</Text>
-                                        <Text style={styles.equbMeta}>{equb.meta}</Text>
-                                    </View>
-                                </View>
-                                <View style={styles.statusBadge}>
-                                    <Text style={styles.statusText}>{equb.status}</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.divider} />
-
-                            <View style={styles.cardFooter}>
-                                <View>
-                                    <Text style={styles.collectLabel}>To Collect</Text>
-                                    <Text style={styles.collectValue}>{equb.toCollect}</Text>
-                                </View>
-                                <TouchableOpacity style={[
-                                    styles.viewBtn,
-                                    equb.name.includes('Merkato') ? styles.viewBtnPrimary : styles.viewBtnOutline
-                                ]}>
-                                    <Text style={[
-                                        styles.viewBtnText,
-                                        equb.name.includes('Merkato') ? styles.textWhite : styles.textGray
-                                    ]}>View List</Text>
-                                </TouchableOpacity>
-                            </View>
+                    {loading ? (
+                        <View style={styles.centerContent}>
+                            <ActivityIndicator size="small" color="#2b6cee" />
+                            <Text style={styles.infoText}>Loading assigned equbs...</Text>
                         </View>
-                    ))}
+                    ) : error ? (
+                        <View style={styles.centerContent}>
+                            <Text style={styles.errorText}>{error}</Text>
+                        </View>
+                    ) : equbs.length === 0 ? (
+                        <View style={styles.centerContent}>
+                            <Text style={styles.emptyText}>No assigned equbs found.</Text>
+                        </View>
+                    ) : (
+                        equbs.map((equb) => {
+                            const { label, badgeColor } = mapStatus(equb.status);
+                            const initials = getInitials(equb.name);
+                            return (
+                                <View key={equb.id} style={styles.equbCard}>
+                                    <View style={styles.cardHeader}>
+                                        <View style={styles.cardLeft}>
+                                            <View style={[styles.initialsBox, styles.bgBlue]}>
+                                                <Text style={[styles.initialsText, styles.textBlue]}>
+                                                    {initials}
+                                                </Text>
+                                            </View>
+                                            <View>
+                                                <View style={styles.nameRow}>
+                                                    <Text style={styles.equbName}>{equb.name}</Text>
+                                                    {equb.memberships?.[0]?.role && (
+                                                        <View style={styles.roleBadge}>
+                                                            <Text style={styles.roleText}>{equb.memberships[0].role}</Text>
+                                                        </View>
+                                                    )}
+                                                </View>
+                                                <Text style={styles.equbMeta}>
+                                                    Rnd {equb.currentRound} • {equb.frequency}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <View style={[styles.statusBadge, { backgroundColor: `${badgeColor}22` }]}>
+                                            <Text style={[styles.statusText, { color: badgeColor }]}>{label}</Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.divider} />
+
+                                    <View style={styles.cardFooter}>
+                                        <View>
+                                            <Text style={styles.collectLabel}>Members</Text>
+                                            <Text style={styles.collectValue}>{equb._count?.memberships || 0} Members</Text>
+                                        </View>
+                                        <TouchableOpacity
+                                            style={[styles.viewBtn, styles.viewBtnPrimary]}
+                                            onPress={() => handleAction('EQUB_DETAILS', { equbId: equb.id })}
+                                        >
+                                            <Text style={styles.viewBtnText}>View List</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            );
+                        })
+                    )}
                 </View>
             </View>
         </>
@@ -370,5 +431,44 @@ const styles = StyleSheet.create({
     },
     textGray: {
         color: '#cbd5e1',
+    },
+    centerContent: {
+        padding: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+    },
+    infoText: {
+        color: '#94a3b8',
+        fontSize: 14,
+    },
+    errorText: {
+        color: '#ef4444',
+        fontSize: 14,
+    },
+    emptyText: {
+        color: '#94a3b8',
+        fontSize: 14,
+        fontStyle: 'italic',
+    },
+    nameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 2,
+    },
+    roleBadge: {
+        backgroundColor: 'rgba(51, 65, 85, 0.4)',
+        paddingHorizontal: 6,
+        paddingVertical: 1,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    roleText: {
+        fontSize: 8,
+        fontWeight: '700',
+        color: '#94a3b8',
+        textTransform: 'uppercase',
     },
 });

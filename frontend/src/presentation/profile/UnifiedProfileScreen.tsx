@@ -6,6 +6,7 @@ import { MemberProfileSection } from './MemberProfileSection';
 import { AdminProfileSection } from './AdminProfileSection';
 import { CollectorProfileSection } from './CollectorProfileSection';
 import { useAuth } from '../../application/auth/auth_context';
+import { useProfileHandler } from './useProfileHandler';
 
 interface ProfileScreenProps {
     navigation: any;
@@ -13,6 +14,7 @@ interface ProfileScreenProps {
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     const { user } = useAuth();
+    const { handleAction } = useProfileHandler();
 
     if (!user) return null;
 
@@ -39,23 +41,29 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             <View style={styles.container}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <View style={{ width: 32 }} />
+                    <View style={{ width: 44 }} />
                     <Text style={styles.headerTitle}>My Profile</Text>
-                    <View style={{ width: 32 }} />
+                    <TouchableOpacity
+                        style={styles.settingsHeaderBtn}
+                        onPress={() => handleAction('SETTINGS')}
+                    >
+                        <Text style={styles.settingsHeaderIcon}>⚙️</Text>
+                    </TouchableOpacity>
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    {/* Truthful Profile Hero Section */}
+                    {/* Minimal Identity Section */}
                     <View style={styles.profileSection}>
                         <View style={styles.avatarWrapper}>
                             <View style={styles.avatarContainer}>
-                                <View style={[styles.avatarPlaceholder, { backgroundColor: roleBadge.color + '22' }]}>
-                                    <Text style={[styles.avatarInitial, { color: roleBadge.color }]}>
+                                <View style={[styles.avatarPlaceholder, { backgroundColor: '#1e293b' }]}>
+                                    <Text style={[styles.avatarInitial, { color: '#ffffff' }]}>
                                         {user.fullName.charAt(0).toUpperCase()}
                                     </Text>
+                                    <View style={styles.profileGlow} />
                                 </View>
-                                <View style={[styles.roleBadgeIcon, { backgroundColor: roleBadge.color }]}>
-                                    <Text style={styles.badgeIconText}>{roleBadge.icon}</Text>
+                                <View style={[styles.roleBadgeIcon, { backgroundColor: '#2b6cee' }]}>
+                                    <Text style={styles.badgeIconText}>🛡️</Text>
                                 </View>
                             </View>
                         </View>
@@ -67,35 +75,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
                                     <Text style={styles.verifiedIcon}>✓</Text>
                                 </View>
                             </View>
-                            <Text style={styles.phoneText}>{user.email}</Text>
-                            <Text style={styles.dateText}>Joined {new Date(user.createdAt).toLocaleDateString()}</Text>
 
                             <View style={styles.roleChip}>
-                                <Text style={styles.roleIcon}>{roleBadge.icon}</Text>
-                                <Text style={styles.roleText}>{roleBadge.label}</Text>
+                                <Text style={{ fontSize: 14 }}>🛡️</Text>
+                                <Text style={styles.roleText}>ADMINISTRATOR</Text>
                             </View>
                         </View>
                     </View>
 
-                    <View style={styles.divider} />
-
                     {/* Role-Specific Sections */}
-                    {currentRole === GlobalRole.MEMBER && <MemberProfileSection navigation={navigation} />}
-                    {currentRole === GlobalRole.ADMIN && <AdminProfileSection navigation={navigation} />}
-                    {currentRole === GlobalRole.COLLECTOR && <CollectorProfileSection navigation={navigation} />}
-
-                    {/* Shared Section - Settings Access */}
-                    <View style={styles.settingsSection}>
-                        <TouchableOpacity
-                            style={styles.settingsBtn}
-                            onPress={() => navigation.navigate('Settings')}
-                        >
-                            <View style={styles.settingsBtnLeft}>
-                                <Text style={styles.settingsIcon}>⚙️</Text>
-                                <Text style={styles.settingsTitle}>Settings</Text>
-                            </View>
-                            <Text style={styles.settingsChevron}>›</Text>
-                        </TouchableOpacity>
+                    <View style={styles.dynamicContent}>
+                        {currentRole === GlobalRole.MEMBER && <MemberProfileSection />}
+                        {currentRole === GlobalRole.ADMIN && <AdminProfileSection />}
+                        {currentRole === GlobalRole.COLLECTOR && <CollectorProfileSection />}
                     </View>
 
                     <View style={{ height: 100 }} />
@@ -108,158 +100,145 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#101622',
+        backgroundColor: '#0a0f18',
     },
     container: {
         flex: 1,
-        backgroundColor: '#101622',
+        backgroundColor: '#0a0f18',
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: 'rgba(16, 22, 34, 0.9)',
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+        paddingTop: 12,
+        paddingBottom: 20,
     },
     headerTitle: {
         fontSize: 18,
-        fontWeight: '700',
+        fontWeight: '800',
         color: '#ffffff',
+        letterSpacing: 0.5,
+    },
+    settingsHeaderBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    settingsHeaderIcon: {
+        fontSize: 20,
     },
     scrollContent: {
-        paddingTop: 24,
+        paddingTop: 8,
     },
     /* Shared Profile Hero */
     profileSection: {
         alignItems: 'center',
         paddingHorizontal: 16,
+        marginBottom: 32,
     },
     avatarWrapper: {
-        marginBottom: 16,
+        marginBottom: 20,
     },
     avatarContainer: {
         position: 'relative',
     },
     avatarPlaceholder: {
-        width: 96,
-        height: 96,
-        borderRadius: 48,
-        borderWidth: 4,
-        borderColor: '#1c2333',
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: '#161d2a',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        overflow: 'hidden',
+    },
+    profileGlow: {
+        position: 'absolute',
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(43, 108, 238, 0.15)',
+        borderRadius: 60,
+        transform: [{ scale: 1.2 }],
     },
     avatarInitial: {
-        fontSize: 40,
-        fontWeight: '700',
+        fontSize: 48,
+        fontWeight: '800',
+        color: '#ffffff',
+        zIndex: 1,
     },
     roleBadgeIcon: {
         position: 'absolute',
-        bottom: 0,
-        right: 0,
+        bottom: 4,
+        right: 4,
         width: 32,
         height: 32,
         borderRadius: 16,
+        backgroundColor: '#2b6cee',
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 3,
-        borderColor: '#101622',
+        borderColor: '#0a0f18',
+        zIndex: 2,
     },
     badgeIconText: {
-        fontSize: 14,
+        fontSize: 12,
+        color: '#ffffff',
     },
     infoCenter: {
         alignItems: 'center',
-        gap: 4,
+        gap: 12,
     },
     nameRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 10,
     },
     nameText: {
-        fontSize: 20,
-        fontWeight: '700',
+        fontSize: 32,
+        fontWeight: '900',
         color: '#ffffff',
+        letterSpacing: -0.5,
     },
-    verifiedBadge: {},
+    verifiedBadge: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: '#2b6cee',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#2b6cee',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.5,
+        shadowRadius: 5,
+    },
     verifiedIcon: {
-        color: '#2b6cee',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    phoneText: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#94a3b8',
-    },
-    dateText: {
+        color: '#ffffff',
         fontSize: 12,
-        color: '#64748b',
-        marginTop: 2,
+        fontWeight: '900',
     },
     roleChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(43, 108, 238, 0.2)',
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 16,
-        marginTop: 8,
+        backgroundColor: 'rgba(43, 108, 238, 0.25)',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 25,
         borderWidth: 1,
-        borderColor: 'rgba(43, 108, 238, 0.2)',
-    },
-    roleIcon: {
-        fontSize: 14,
-        color: '#2b6cee',
+        borderColor: 'rgba(43, 108, 238, 0.4)',
+        gap: 8,
     },
     roleText: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: '#2b6cee',
-        letterSpacing: 1,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#1e293b',
-        marginVertical: 24,
-        marginHorizontal: 24,
-    },
-    /* Settings Section */
-    settingsSection: {
-        paddingHorizontal: 16,
-        marginBottom: 24,
-    },
-    settingsBtn: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: '#1c2333',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#2d3748',
-    },
-    settingsBtnLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    settingsIcon: {
-        fontSize: 24,
-    },
-    settingsTitle: {
-        fontSize: 16,
-        fontWeight: '700',
+        fontSize: 13,
+        fontWeight: '800',
         color: '#ffffff',
+        letterSpacing: 1.2,
     },
-    settingsChevron: {
-        fontSize: 24,
-        color: '#64748b',
+    dynamicContent: {
+        flex: 1,
     },
 });

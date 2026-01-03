@@ -128,7 +128,7 @@ export const EqubOverviewScreen: React.FC<{ route: any, navigation: any }> = ({ 
                             {!isAdmin && !isCollector && (
                                 <TouchableOpacity
                                     style={styles.primaryAction}
-                                    onPress={() => navigation.navigate('ContributionCapture', { equbId: equb.id })}
+                                    onPress={() => navigation.navigate('MemberContribution', { equbId: equb.id })}
                                 >
                                     <Text style={styles.actionText}>Make Contribution</Text>
                                 </TouchableOpacity>
@@ -137,9 +137,12 @@ export const EqubOverviewScreen: React.FC<{ route: any, navigation: any }> = ({ 
                             {(isCollector || isAdmin) && (
                                 <TouchableOpacity
                                     style={[styles.primaryAction, { marginBottom: 12, backgroundColor: '#eab308' }]}
-                                    onPress={() => navigation.navigate('ContributionManagement', { equbId: equb.id })}
+                                    onPress={() => navigation.navigate('AdminContributionOversight', {
+                                        equbId: equb.id,
+                                        roundNumber: equb.currentRound
+                                    })}
                                 >
-                                    <Text style={styles.actionText}>Review Pending</Text>
+                                    <Text style={styles.actionText}>Round Oversight</Text>
                                 </TouchableOpacity>
                             )}
 

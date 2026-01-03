@@ -12,13 +12,43 @@ describe('PayoutService', () => {
         payout: { findUnique: jest.Mock; findMany: jest.Mock; create: jest.Mock; count: jest.Mock; findFirst: jest.Mock };
         equb: { findUnique: jest.Mock; update: jest.Mock };
         membership: { findUnique: jest.Mock };
-        contribution: { count: jest.Mock };
+        contribution: { count: jest.Mock; updateMany: jest.Mock; findMany: jest.Mock };
     };
     let auditService: { logEvent: jest.Mock };
 
-    const mockAdmin = { id: 'admin-id', role: GlobalRole.ADMIN, email: 'admin@test.com', fullName: 'Admin' } as any;
-    const mockCollector = { id: 'collector-id', role: GlobalRole.COLLECTOR, email: 'collector@test.com', fullName: 'Collector' } as any;
-    const mockMember = { id: 'member-id', role: GlobalRole.MEMBER, email: 'member@test.com', fullName: 'Member' } as any;
+    const mockAdmin = {
+        id: 'admin-id',
+        role: GlobalRole.ADMIN,
+        email: 'admin@test.com',
+        fullName: 'Admin',
+        notificationPreferences: {},
+        language: 'en',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        passwordHash: 'hash',
+    };
+    const mockCollector = {
+        id: 'collector-id',
+        role: GlobalRole.COLLECTOR,
+        email: 'collector@test.com',
+        fullName: 'Collector',
+        notificationPreferences: {},
+        language: 'en',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        passwordHash: 'hash',
+    };
+    const mockMember = {
+        id: 'member-id',
+        role: GlobalRole.MEMBER,
+        email: 'member@test.com',
+        fullName: 'Member',
+        notificationPreferences: {},
+        language: 'en',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        passwordHash: 'hash',
+    };
 
     const mockEqubId = 'equb-id';
     const mockRecipinetId = 'recipient-id';
@@ -27,21 +57,23 @@ describe('PayoutService', () => {
         prisma = {
             $transaction: jest.fn((cb) => cb(prisma)),
             payout: {
-                findUnique: jest.fn(),
-                findMany: jest.fn(),
+                findUnique: jest.fn().mockResolvedValue(null),
+                findMany: jest.fn().mockResolvedValue([]),
                 create: jest.fn(),
-                count: jest.fn(),
-                findFirst: jest.fn(),
+                count: jest.fn().mockResolvedValue(0),
+                findFirst: jest.fn().mockResolvedValue(null),
             },
             equb: {
-                findUnique: jest.fn(),
+                findUnique: jest.fn().mockResolvedValue(null),
                 update: jest.fn(),
             },
             membership: {
-                findUnique: jest.fn(),
+                findUnique: jest.fn().mockResolvedValue(null),
             },
             contribution: {
-                count: jest.fn(),
+                count: jest.fn().mockResolvedValue(0),
+                updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+                findMany: jest.fn().mockResolvedValue([]),
             },
         };
 
@@ -68,8 +100,8 @@ describe('PayoutService', () => {
             totalRounds: 10,
             amount: 1000,
             memberships: [
-                { userId: 'recipient-id', status: MembershipStatus.ACTIVE, role: MembershipRole.MEMBER },
-                { userId: 'other-id', status: MembershipStatus.ACTIVE, role: MembershipRole.MEMBER },
+                { userId: 'recipient-id', status: MembershipStatus.ACTIVE, role: MembershipRole.MEMBER, joinedAt: new Date(1000) },
+                { userId: 'other-id', status: MembershipStatus.ACTIVE, role: MembershipRole.MEMBER, joinedAt: new Date(2000) },
             ],
             payouts: [],
         };
@@ -83,10 +115,14 @@ describe('PayoutService', () => {
                 equbId: mockEqubId,
                 roundNumber: 1,
                 recipientUserId: 'recipient-id',
-                amount: 1000,
+                amount: 2000, // 1000 * 2 members
                 status: PayoutStatus.EXECUTED,
                 recipient: { fullName: 'Recipient Name' },
             });
+            prisma.contribution.findMany.mockResolvedValue([
+                { amount: 1000 },
+                { amount: 1000 }
+            ]);
             prisma.equb.update.mockResolvedValue({ ...mockEqub, currentRound: 2 });
 
             const result = await service.executePayout(mockAdmin, mockEqubId);
@@ -113,6 +149,10 @@ describe('PayoutService', () => {
                 status: PayoutStatus.EXECUTED,
                 recipient: { fullName: 'Recipient Name' },
             });
+            prisma.contribution.findMany.mockResolvedValue([
+                { amount: 1000 },
+                { amount: 1000 }
+            ]);
 
             await service.executePayout(mockCollector, mockEqubId);
             expect(prisma.payout.create).toHaveBeenCalled();
@@ -134,7 +174,7 @@ describe('PayoutService', () => {
             prisma.contribution.count.mockResolvedValue(1); // Only 1 paid, 2 expected
 
             await expect(service.executePayout(mockAdmin, mockEqubId))
-                .rejects.toThrow(BadRequestException);
+                .rejects.toThrow('Round not fully funded');
         });
 
         it('should throw ConflictException if payout already exists for round', async () => {
@@ -143,12 +183,26 @@ describe('PayoutService', () => {
             prisma.payout.findUnique.mockResolvedValue({ id: 'existing' });
 
             await expect(service.executePayout(mockAdmin, mockEqubId))
-                .rejects.toThrow(ConflictException);
+                .rejects.toThrow('Payout already executed for this round');
+        });
+
+        it('should throw ConflictException if reconciliation fails (amount mismatch)', async () => {
+            prisma.equb.findUnique.mockResolvedValue(mockEqub);
+            prisma.contribution.count.mockResolvedValue(2);
+            prisma.payout.findUnique.mockResolvedValue(null);
+            prisma.payout.create.mockResolvedValue({ id: 'payout', amount: 2000 });
+
+            // Mock settled contributions with WRONG sum
+            prisma.contribution.findMany.mockResolvedValue([
+                { amount: 1000 },
+                { amount: 500 } // Total 1500, expected 2000
+            ]);
+
+            await expect(service.executePayout(mockAdmin, mockEqubId))
+                .rejects.toThrow('Financial reconciliation failed');
         });
 
         it('should throw ConflictException if no eligible members found', async () => {
-            // In the new logic, we don't have a manual recipient, we select the first eligible one.
-            // If NO one is eligible, it throws.
             const equbAllWinners = {
                 ...mockEqub,
                 payouts: [
@@ -156,14 +210,17 @@ describe('PayoutService', () => {
                     { recipientUserId: 'other-id' }
                 ],
             };
+            // We need to mock payout.findMany for eligible recipients check
+            prisma.payout.findMany.mockResolvedValue([
+                { recipientUserId: 'recipient-id' },
+                { recipientUserId: 'other-id' }
+            ]);
             prisma.equb.findUnique.mockResolvedValue(equbAllWinners);
             prisma.contribution.count.mockResolvedValue(2);
             prisma.payout.findUnique.mockResolvedValue(null);
 
             await expect(service.executePayout(mockAdmin, mockEqubId))
-                .rejects.toThrow(ConflictException);
-            await expect(service.executePayout(mockAdmin, mockEqubId))
-                .rejects.toThrow('No eligible members for payout');
+                .rejects.toThrow('No eligible recipients remaining');
         });
 
         it('should mark Equb as COMPLETED if final round', async () => {
@@ -171,7 +228,8 @@ describe('PayoutService', () => {
             prisma.equb.findUnique.mockResolvedValue(finalRoundEqub);
             prisma.contribution.count.mockResolvedValue(2);
             prisma.payout.findUnique.mockResolvedValue(null);
-            prisma.payout.create.mockResolvedValue({ id: 'payout', status: PayoutStatus.EXECUTED, recipient: { fullName: 'Recipient' } });
+            prisma.payout.create.mockResolvedValue({ id: 'payout', status: PayoutStatus.EXECUTED, amount: 2000, recipient: { fullName: 'Recipient' } });
+            prisma.contribution.findMany.mockResolvedValue([{ amount: 1000 }, { amount: 1000 }]);
 
             await service.executePayout(mockAdmin, mockEqubId);
 

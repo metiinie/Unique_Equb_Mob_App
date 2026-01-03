@@ -1,171 +1,139 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
-import { Theme } from '../theme';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { HomeHeader } from '../components/HomeHeader';
-
-// Pure View Component: Admin Home Dashboard
-// Contains ONLY UI - no navigation, no role logic, no guards
-// Rendered internally by HomeScreen when role === admin
+import { LinearGradient } from 'expo-linear-gradient';
+import { ApiClient } from '../services/api_client';
+import { useAuth } from '../../application/auth/auth_context';
+import { OPS_THEME } from '../../core/theme/ops_theme';
+import { ManagedSummaryDto, SystemHealthDto } from '../../domain/dtos';
 
 export const AdminHomeView = ({ navigation }: { navigation: any }) => {
-    // Mock data for Equb circles
-    const equbs = [
-        {
-            id: '1',
-            name: 'Addis Merkato Traders',
-            frequency: 'Monthly',
-            payout: '5,000 ETB',
-            round: 4,
-            total: 10,
-            progress: 40,
-            status: 'Healthy',
-            statusColor: 'green',
-            icon: '🏪',
-            iconBg: '#6366f1',
-        },
-        {
-            id: '2',
-            name: 'Family Savings',
-            frequency: 'Weekly',
-            payout: '1,000 ETB',
-            round: 8,
-            total: 12,
-            progress: 66,
-            status: 'Action Needed',
-            statusColor: 'red',
-            icon: '👨‍👩‍👧',
-            iconBg: '#f97316',
-            warning: '2 Members overdue',
-        },
-        {
-            id: '3',
-            name: 'Office Colleagues',
-            frequency: 'Bi-Weekly',
-            payout: '2,500 ETB',
-            round: 1,
-            total: 12,
-            progress: 8,
-            status: 'Healthy',
-            statusColor: 'green',
-            icon: '💼',
-            iconBg: '#3b82f6',
-        },
-    ];
+    const { user } = useAuth();
+    const [summary, setSummary] = useState<ManagedSummaryDto | null>(null);
+    const [health, setHealth] = useState<SystemHealthDto | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const fetchData = async () => {
+        try {
+            const [summaryData, healthData] = await Promise.all([
+                ApiClient.get<ManagedSummaryDto>('/equbs/managed/summary'),
+                ApiClient.get<SystemHealthDto>('/system/financial-health')
+            ]);
+            setSummary(summaryData);
+            setHealth(healthData);
+        } catch (error) {
+            console.error('[AdminHomeView] Error:', error);
+            // Fallback mock data if endpoint fails (for dev resilience)
+            if (!summary) setSummary({ totalVolume: 1000, totalMembers: 0, managedCount: 0, activeCircles: 0, todayCollected: 0, todayPending: 0 } as any);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchData();
+    };
+
+    const isSystemDegraded = health?.isDegraded || false;
+    const statusColor = isSystemDegraded ? OPS_THEME.colors.status.critical : OPS_THEME.colors.status.success;
+    const statusText = isSystemDegraded ? 'SYSTEM DEGRADED' : 'SYSTEM OPERATIONAL';
+
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={OPS_THEME.colors.text.primary} />
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar style="light" />
-            <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-                {/* Header */}
-                <HomeHeader
-                    userName="Selam, Abebe"
-                    greeting="Welcome back"
-                    onNotificationPress={() => navigation.navigate('NotificationCenterScreen')}
-                />
 
-                {/* Quick Stats */}
-                <View style={styles.statsGrid}>
-                    <View style={styles.statCard}>
-                        <View style={styles.statHeader}>
-                            <View style={[styles.statIcon, { backgroundColor: 'rgba(43, 108, 238, 0.2)' }]}>
-                                <Text style={styles.statIconText}>👥</Text>
-                            </View>
-                            <Text style={styles.statLabel}>Active Equbs</Text>
-                        </View>
-                        <Text style={styles.statValue}>3</Text>
+            {/* 1. Header Section */}
+            <View style={styles.header}>
+                <View style={styles.headerLeft}>
+                    {/* Placeholder Avatar */}
+                    <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{user?.fullName?.charAt(0) || 'A'}</Text>
                     </View>
-                    <View style={styles.statCard}>
-                        <View style={styles.statHeader}>
-                            <View style={[styles.statIcon, { backgroundColor: 'rgba(34, 197, 94, 0.2)' }]}>
-                                <Text style={styles.statIconText}>💳</Text>
-                            </View>
-                            <Text style={styles.statLabel}>Collected</Text>
-                        </View>
-                        <Text style={styles.statValue}>
-                            45k <Text style={styles.statCurrency}>ETB</Text>
-                        </Text>
+                    <View>
+                        <Text style={styles.greeting}>Hello, {user?.fullName?.split(' ')[0] || 'Admin'}</Text>
+                        <Text style={styles.roleLabel}>Admin Access</Text>
                     </View>
                 </View>
+                <TouchableOpacity style={styles.bellBtn} onPress={() => navigation.navigate('NotificationCenter')}>
+                    <Text style={styles.bellIcon}>🔔</Text>
+                    <View style={styles.redDot} />
+                </TouchableOpacity>
+            </View>
 
-                {/* Create New CTA */}
-                <View style={styles.ctaContainer}>
-                    <TouchableOpacity style={styles.createBtn}>
-                        <Text style={styles.createIcon}>➕</Text>
-                        <Text style={styles.createText}>Create New Equb</Text>
-                    </TouchableOpacity>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={OPS_THEME.colors.text.primary} />}
+            >
+                {/* 2. System Status Badge */}
+                <View style={styles.statusSection}>
+                    <View style={[styles.statusBadge, { borderColor: statusColor }]}>
+                        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                        <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
+                    </View>
                 </View>
 
-                {/* Section Title */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Your Circles</Text>
-                    <TouchableOpacity>
-                        <Text style={styles.viewAllBtn}>View All</Text>
-                    </TouchableOpacity>
+                {/* 3. Summary Cards Section */}
+                <View style={styles.summaryRow}>
+                    <SummaryCard label="TOTAL EQUBS" value={summary?.managedCount || 0} />
+                    <SummaryCard label="TOTAL USERS" value={summary?.totalMembers || 0} />
+                    <SummaryCard label="ACTIVE CIRCLES" value={summary?.activeCircles || 0} />
                 </View>
 
-                {/* Equb List */}
-                <View style={styles.equbList}>
-                    {equbs.map((equb) => (
-                        <View key={equb.id} style={styles.equbCard}>
-                            <View style={styles.equbHeader}>
-                                <View style={styles.equbInfo}>
-                                    <View style={[styles.equbIcon, { backgroundColor: `${equb.iconBg}1A` }]}>
-                                        <Text style={styles.equbIconText}>{equb.icon}</Text>
-                                    </View>
-                                    <View style={styles.equbDetails}>
-                                        <Text style={styles.equbName}>{equb.name}</Text>
-                                        <Text style={styles.equbMeta}>
-                                            {equb.frequency} • {equb.payout} Payout
-                                        </Text>
-                                    </View>
-                                </View>
-                                <View
-                                    style={[
-                                        styles.statusBadge,
-                                        equb.statusColor === 'green' && styles.statusBadgeGreen,
-                                        equb.statusColor === 'red' && styles.statusBadgeRed,
-                                    ]}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.statusText,
-                                            equb.statusColor === 'green' && styles.statusTextGreen,
-                                            equb.statusColor === 'red' && styles.statusTextRed,
-                                        ]}
-                                    >
-                                        {equb.status}
-                                    </Text>
-                                </View>
-                            </View>
+                <View style={styles.spacer} />
 
-                            {/* Progress */}
-                            <View style={styles.progressSection}>
-                                <View style={styles.progressHeader}>
-                                    <Text style={styles.progressLabel}>
-                                        Round {equb.round} of {equb.total}
-                                    </Text>
-                                    <Text style={styles.progressPercent}>{equb.progress}%</Text>
-                                </View>
-                                <View style={styles.progressBarBg}>
-                                    <View
-                                        style={[
-                                            styles.progressBarFill,
-                                            { width: `${equb.progress}%` },
-                                            equb.statusColor === 'red' && styles.progressBarOrange,
-                                        ]}
-                                    />
-                                </View>
-                                {equb.warning && (
-                                    <View style={styles.warningRow}>
-                                        <Text style={styles.warningIcon}>⚠️</Text>
-                                        <Text style={styles.warningText}>{equb.warning}</Text>
-                                    </View>
-                                )}
-                            </View>
+                <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
+
+                {/* 4. Quick Actions (Manage Equbs) */}
+                <TouchableOpacity style={styles.quickActionCard} onPress={() => navigation.navigate('ManagedEqubs')}>
+                    <View style={styles.quickActionHeader}>
+                        <View style={styles.quickActionIconBg}>
+                            <Text style={styles.quickActionIcon}>👥</Text>
                         </View>
-                    ))}
-                </View>
+                        <Text style={styles.chevron}>›</Text>
+                    </View>
+                    <Text style={styles.quickActionTitle}>Manage Equbs</Text>
+                    <Text style={styles.quickActionDesc}>Review ongoing circles, member status, and transaction history.</Text>
+                    <TouchableOpacity style={styles.openManagerBtn} onPress={() => navigation.navigate('ManagedEqubs')}>
+                        <Text style={styles.openManagerText}>Open Manager</Text>
+                    </TouchableOpacity>
+                </TouchableOpacity>
+
+                {/* 5. Primary Action Button (Create) */}
+                <TouchableOpacity style={styles.createBtn} onPress={() => navigation.navigate('CreateEqub')}>
+                    <Text style={styles.plusIcon}>+</Text>
+                    <Text style={styles.createBtnText}>Create New Equb</Text>
+                </TouchableOpacity>
+
+                {/* 6. System Tools Section */}
+                <Text style={[styles.sectionTitle, { marginTop: 32 }]}>SYSTEM TOOLS</Text>
+
+                <TouchableOpacity style={styles.toolCard} onPress={() => navigation.navigate('AdvancedAnalytics')}>
+                    <View style={styles.toolIconBg}>
+                        <Text style={styles.toolIcon}>📊</Text>
+                    </View>
+                    <View style={styles.toolContent}>
+                        <Text style={styles.toolTitle}>More Tools & Reports</Text>
+                        <Text style={styles.toolSub}>Analytics, Health, Payouts</Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                </TouchableOpacity>
 
                 <View style={{ height: 40 }} />
             </ScrollView>
@@ -173,284 +141,255 @@ export const AdminHomeView = ({ navigation }: { navigation: any }) => {
     );
 };
 
+const SummaryCard = ({ label, value }: { label: string, value: number }) => (
+    <View style={styles.summaryCard}>
+        <Text style={styles.summaryValue}>{value}</Text>
+        <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
+);
+
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#101622',
+        backgroundColor: '#0F111A' // Dark theme background
     },
-    container: {
+    loadingContainer: {
         flex: 1,
-        backgroundColor: '#101622',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#0F111A'
     },
-    scrollContent: {
-        paddingBottom: 24,
-    },
-    /* Header */
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingTop: 32,
-        paddingBottom: 16,
+        paddingHorizontal: 20,
+        paddingTop: 10,
+        paddingBottom: 20,
     },
-    profileSection: {
+    headerLeft: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 16,
-    },
-    avatarContainer: {
-        position: 'relative',
+        gap: 12,
     },
     avatar: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#2b6cee',
-        borderWidth: 2,
-        borderColor: '#2b6cee',
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#1E293B',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#334155',
     },
-    statusDot: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        width: 16,
-        height: 16,
-        borderRadius: 8,
-        backgroundColor: '#22c55e',
-        borderWidth: 2,
-        borderColor: '#101622',
-    },
-    welcomeText: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#9da6b9',
-    },
-    nameText: {
+    avatarText: {
         fontSize: 20,
-        fontWeight: '700',
-        color: '#ffffff',
-        letterSpacing: -0.3,
+        fontWeight: 'bold',
+        color: '#F8FAFC',
     },
-    notificationBtn: {
+    greeting: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#F8FAFC',
+    },
+    roleLabel: {
+        fontSize: 12,
+        color: '#3B82F6', // Blue font
+        fontWeight: '600',
+    },
+    bellBtn: {
         width: 40,
         height: 40,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: '#1E293B',
+        borderRadius: 20,
     },
     bellIcon: {
         fontSize: 20,
     },
-    /* Stats */
-    statsGrid: {
-        flexDirection: 'row',
-        gap: 12,
-        paddingHorizontal: 16,
+    redDot: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#EF4444',
+        borderWidth: 1,
+        borderColor: '#1E293B',
+    },
+    scrollContent: {
+        paddingHorizontal: 20,
+        paddingBottom: 40,
+    },
+    statusSection: {
         marginBottom: 24,
     },
-    statCard: {
-        flex: 1,
-        backgroundColor: '#1e2430',
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#1e293b',
-    },
-    statHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
-    },
-    statIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    statIconText: {
-        fontSize: 14,
-    },
-    statLabel: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#9da6b9',
-    },
-    statValue: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#ffffff',
-        letterSpacing: -0.5,
-    },
-    statCurrency: {
-        fontSize: 14,
-        fontWeight: '400',
-        color: '#64748b',
-    },
-    /* CTA */
-    ctaContainer: {
-        paddingHorizontal: 16,
-        marginBottom: 8,
-    },
-    createBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: '#2b6cee',
-        paddingVertical: 16,
-        paddingHorizontal: 24,
-        borderRadius: 12,
-        shadowColor: '#1e3a8a',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    createIcon: {
-        fontSize: 18,
-    },
-    createText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#ffffff',
-    },
-    /* Section */
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingTop: 24,
-        paddingBottom: 8,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#ffffff',
-        letterSpacing: -0.3,
-    },
-    viewAllBtn: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#2b6cee',
-    },
-    /* Equb List */
-    equbList: {
-        paddingHorizontal: 16,
-        gap: 16,
-    },
-    equbCard: {
-        backgroundColor: '#1e2430',
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#1e293b',
-        gap: 12,
-    },
-    equbHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    equbInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        flex: 1,
-    },
-    equbIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 8,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    equbIconText: {
-        fontSize: 20,
-    },
-    equbDetails: {
-        flex: 1,
-    },
-    equbName: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#ffffff',
-        marginBottom: 2,
-    },
-    equbMeta: {
-        fontSize: 12,
-        color: '#9da6b9',
-    },
     statusBadge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 99,
+        alignSelf: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
         borderWidth: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        gap: 8,
     },
-    statusBadgeGreen: {
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-        borderColor: 'rgba(34, 197, 94, 0.2)',
-    },
-    statusBadgeRed: {
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        borderColor: 'rgba(239, 68, 68, 0.2)',
+    statusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
     },
     statusText: {
         fontSize: 12,
-        fontWeight: '500',
+        fontWeight: 'bold',
     },
-    statusTextGreen: {
-        color: '#22c55e',
-    },
-    statusTextRed: {
-        color: '#ef4444',
-    },
-    /* Progress */
-    progressSection: {
-        marginTop: 4,
-    },
-    progressHeader: {
+    summaryRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 6,
+        gap: 12,
+        marginBottom: 32,
     },
-    progressLabel: {
+    summaryCard: {
+        flex: 1,
+        backgroundColor: '#1f2937', // Card bg
+        borderRadius: 16,
+        padding: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 100,
+    },
+    summaryValue: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#F8FAFC',
+        marginBottom: 4,
+    },
+    summaryLabel: {
+        fontSize: 10,
+        color: '#94A3B8',
+        textAlign: 'center',
+        fontWeight: 'bold',
+    },
+    sectionTitle: {
         fontSize: 12,
-        color: '#64748b',
+        fontWeight: 'bold',
+        color: '#94A3B8',
+        letterSpacing: 1,
+        marginBottom: 16,
+        textTransform: 'uppercase',
     },
-    progressPercent: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#ffffff',
-    },
-    progressBarBg: {
-        width: '100%',
+    spacer: {
         height: 8,
-        backgroundColor: '#2c3442',
-        borderRadius: 4,
-        overflow: 'hidden',
     },
-    progressBarFill: {
-        height: '100%',
-        backgroundColor: '#2b6cee',
-        borderRadius: 4,
+    quickActionCard: {
+        backgroundColor: '#1f2937',
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 24,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
     },
-    progressBarOrange: {
-        backgroundColor: '#f97316',
+    quickActionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 16,
     },
-    warningRow: {
+    quickActionIconBg: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        backgroundColor: '#1E3A8A', // Dark blue bg for icon
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    quickActionIcon: {
+        fontSize: 24,
+    },
+    quickActionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#F8FAFC',
+        marginBottom: 8,
+    },
+    quickActionDesc: {
+        fontSize: 14,
+        color: '#94A3B8',
+        lineHeight: 20,
+        marginBottom: 20,
+    },
+    openManagerBtn: {
+        backgroundColor: '#334155',
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    openManagerText: {
+        color: '#F8FAFC',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    createBtn: {
+        backgroundColor: '#2563EB', // Primary Blue
+        borderRadius: 12,
+        paddingVertical: 16,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+        elevation: 2,
+    },
+    plusIcon: {
+        fontSize: 20,
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+    },
+    createBtnText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+    },
+    toolCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        marginTop: 8,
+        backgroundColor: '#1f2937',
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 12,
     },
-    warningIcon: {
-        fontSize: 12,
+    toolIconBg: {
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
     },
-    warningText: {
+    toolIcon: {
+        fontSize: 20,
+    },
+    toolContent: {
+        flex: 1,
+    },
+    toolTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#F8FAFC',
+    },
+    toolSub: {
         fontSize: 12,
-        color: '#f87171',
+        color: '#94A3B8',
+    },
+    chevron: {
+        fontSize: 24,
+        color: '#64748b',
     },
 });

@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { GlobalRole } from '../../../core/constants/enums';
 import { ApiClient } from '../../services/api_client';
 
 interface ContributionsSectionProps {
     role: GlobalRole;
     equbId: string;
+    equbName: string;
+    equbStatus: string;
     onViewAll?: () => void;
 }
 
-export const ContributionsSection: React.FC<ContributionsSectionProps> = ({ role, equbId, onViewAll }) => {
+export const ContributionsSection: React.FC<ContributionsSectionProps> = ({ role, equbId, equbName, equbStatus, onViewAll }) => {
+    const navigation = useNavigation<any>();
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -80,8 +84,11 @@ export const ContributionsSection: React.FC<ContributionsSectionProps> = ({ role
                     ))
                 )}
 
-                {isMember && (
-                    <TouchableOpacity style={styles.payBtn}>
+                {isMember && equbStatus === 'ACTIVE' && (
+                    <TouchableOpacity
+                        style={styles.payBtn}
+                        onPress={() => navigation.navigate('MemberContribution', { equbId, equbName })}
+                    >
                         <Text style={styles.payBtnText}>Make Contribution</Text>
                     </TouchableOpacity>
                 )}

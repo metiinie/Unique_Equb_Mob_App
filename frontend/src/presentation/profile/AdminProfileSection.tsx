@@ -1,384 +1,307 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useProfileHandler } from './useProfileHandler';
+import { ApiClient } from '../services/api_client';
+import { ManagedSummaryDto } from '../../domain/dtos';
+import { useNavigation } from '@react-navigation/native';
 
-// Pure Section Component: Admin-specific profile content
-// Shows Stats, Quick Actions, and Managed Equbs for admins
+interface AdminProfileSectionProps { }
 
-interface AdminProfileSectionProps {
-    navigation?: any;
-}
+export const AdminProfileSection: React.FC<AdminProfileSectionProps> = () => {
+    const { handleAction } = useProfileHandler();
+    const navigation = useNavigation<any>();
+    const [summary, setSummary] = useState<ManagedSummaryDto | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-export const AdminProfileSection: React.FC<AdminProfileSectionProps> = ({ navigation }) => {
-    // Hardcoded data matching: All_Ui_Design/profile_screen_(admin_view)
-    const managedEqubs = [
-        {
-            id: 1,
-            name: 'Addis Business Group',
-            meta: 'Monthly • ETB 50,000',
-            status: 'Healthy',
-            members: 12,
-            round: 'Rnd 4/12',
-            statusColor: 'emerald'
-        },
-        {
-            id: 2,
-            name: 'Family Savings',
-            meta: 'Weekly • ETB 2,000',
-            status: 'Action Req',
-            members: 8,
-            round: 'Rnd 8/10',
-            statusColor: 'amber'
-        },
-        {
-            id: 3,
-            name: 'Community Growth',
-            meta: 'Monthly • ETB 5,000',
-            status: 'Payout Due',
-            members: 24,
-            round: 'Rnd 12/12',
-            statusColor: 'blue'
-        },
-    ];
+    useEffect(() => {
+        const fetchSummary = async () => {
+            try {
+                setLoading(true);
+                const summaryData = await ApiClient.get<any>('/equbs/managed/summary');
+                setSummary(summaryData);
+                setError(null);
+            } catch (err: any) {
+                console.error('[AdminProfileSection] Fetch failed:', err);
+                setError('Failed to load summary');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchSummary();
+    }, []);
 
     return (
-        <>
+        <View style={styles.container}>
             {/* Stats Grid */}
-            <View style={styles.sectionContainer}>
-                <View style={styles.statsGrid}>
-                    <View style={styles.statCard}>
-                        <View style={styles.statHeader}>
-                            <View style={[styles.iconBox, { backgroundColor: 'rgba(37, 99, 235, 0.1)' }]}>
-                                <Text style={[styles.statIcon, { color: '#3b82f6' }]}>💰</Text>
-                            </View>
-                            <Text style={styles.statLabel}>TOTAL VOLUME</Text>
+            <View style={styles.statsGrid}>
+                <View style={styles.statCard}>
+                    <View style={styles.statHeader}>
+                        <View style={[styles.statIconCircle, { backgroundColor: 'rgba(251, 191, 36, 0.1)' }]}>
+                            <Text style={styles.statIconText}>💰</Text>
                         </View>
-                        <View style={styles.statValueRow}>
-                            <Text style={styles.statValue}>1.2M</Text>
-                            <Text style={styles.statUnit}>ETB</Text>
-                        </View>
+                        <Text style={styles.statLabel}>TOTAL VOLUME</Text>
                     </View>
+                    <View style={styles.statValueRow}>
+                        <Text style={styles.statValue}>
+                            {summary ? (summary.totalVolume >= 1000000 ? `${(summary.totalVolume / 1000000).toFixed(1)}M` : (summary.totalVolume / 1000).toFixed(0) + 'K') : '0'}
+                        </Text>
+                        <Text style={styles.statUnit}>ETB</Text>
+                    </View>
+                </View>
 
-                    <View style={styles.statCard}>
-                        <View style={styles.statHeader}>
-                            <View style={[styles.iconBox, { backgroundColor: 'rgba(79, 70, 229, 0.1)' }]}>
-                                <Text style={[styles.statIcon, { color: '#6366f1' }]}>👥</Text>
-                            </View>
-                            <Text style={styles.statLabel}>MEMBERS</Text>
+                <View style={[styles.statCard, { marginLeft: 12 }]}>
+                    <View style={styles.statHeader}>
+                        <View style={[styles.statIconCircle, { backgroundColor: 'rgba(99, 102, 241, 0.1)' }]}>
+                            <Text style={styles.statIconText}>👥</Text>
                         </View>
-                        <View style={styles.statValueRow}>
-                            <Text style={styles.statValue}>24</Text>
-                            <Text style={styles.statUnit}>Active</Text>
-                        </View>
+                        <Text style={styles.statLabel}>MEMBERS</Text>
+                    </View>
+                    <View style={styles.statValueRow}>
+                        <Text style={styles.statValue}>{summary?.totalMembers || 0}</Text>
+                        <Text style={styles.statUnit}>Active</Text>
                     </View>
                 </View>
             </View>
 
-            {/* Quick Actions */}
-            <View style={styles.sectionContainer}>
-                <Text style={styles.sectionTitle}>Quick Actions</Text>
-                <View style={styles.actionsGrid}>
-                    <TouchableOpacity style={styles.actionItem}>
-                        <View style={[styles.actionIconBox, { backgroundColor: '#2b6cee' }]}>
-                            <Text style={styles.actionIconWhite}>+</Text>
-                        </View>
-                        <Text style={styles.actionLabel}>New Equb</Text>
-                    </TouchableOpacity>
+            {/* Quick Actions Header */}
+            <View style={styles.headerRow}>
+                <Text style={styles.sectionTitleText}>Quick Actions</Text>
+            </View>
 
-                    <TouchableOpacity style={styles.actionItem}>
-                        <View style={styles.actionIconOutline}>
-                            <Text style={styles.actionIconGray}>👤</Text>
-                        </View>
+            {/* Circular Actions Row */}
+            <View style={styles.actionsRow}>
+                <TouchableOpacity style={styles.circularAction} onPress={() => handleAction('NEW_EQUB')}>
+                    <View style={[styles.circleIcon, { backgroundColor: '#3b82f6' }]}>
+                        <Text style={styles.circleIconText}>+</Text>
+                    </View>
+                    <Text style={styles.actionLabel}>New Equb</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.circularAction} onPress={() => handleAction('REQUESTS')}>
+                    <View style={styles.circleIconOutline}>
+                        <Text style={styles.circleIconEmoji}>👥</Text>
                         <View style={styles.notificationDot} />
-                        <Text style={styles.actionLabel}>Requests</Text>
-                    </TouchableOpacity>
+                    </View>
+                    <Text style={styles.actionLabel}>Requests</Text>
+                </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionItem}>
-                        <View style={styles.actionIconOutline}>
-                            <Text style={styles.actionIconGray}>📊</Text>
-                        </View>
-                        <Text style={styles.actionLabel}>Reports</Text>
-                    </TouchableOpacity>
+                <TouchableOpacity style={styles.circularAction} onPress={() => handleAction('REPORTS')}>
+                    <View style={styles.circleIconOutline}>
+                        <Text style={styles.circleIconEmoji}>📊</Text>
+                    </View>
+                    <Text style={styles.actionLabel}>Reports</Text>
+                </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionItem}>
-                        <View style={styles.actionIconOutline}>
-                            <Text style={styles.actionIconGray}>📂</Text>
-                        </View>
-                        <Text style={styles.actionLabel}>Archive</Text>
-                    </TouchableOpacity>
-                </View>
+                <TouchableOpacity style={styles.circularAction} onPress={() => handleAction('ARCHIVE')}>
+                    <View style={styles.circleIconOutline}>
+                        <Text style={styles.circleIconEmoji}>📂</Text>
+                    </View>
+                    <Text style={styles.actionLabel}>Archive</Text>
+                </TouchableOpacity>
             </View>
 
-            {/* Managed Equbs */}
-            <View style={styles.sectionContainer}>
-                <View style={styles.listHeader}>
-                    <Text style={styles.listTitle}>Managed Equbs</Text>
-                    <TouchableOpacity>
-                        <Text style={styles.viewAllText}>View All</Text>
-                    </TouchableOpacity>
-                </View>
-
-                <View style={styles.equbList}>
-                    {managedEqubs.map((equb) => (
-                        <TouchableOpacity key={equb.id} style={styles.equbCard}>
-                            <View style={styles.cardTop}>
-                                <View>
-                                    <Text style={styles.equbName}>{equb.name}</Text>
-                                    <Text style={styles.equbMeta}>{equb.meta}</Text>
-                                </View>
-                                <View style={[
-                                    styles.statusChip,
-                                    equb.statusColor === 'emerald' && styles.bgEmerald,
-                                    equb.statusColor === 'amber' && styles.bgAmber,
-                                    equb.statusColor === 'blue' && styles.bgBlue,
-                                ]}>
-                                    <Text style={[
-                                        styles.statusText,
-                                        equb.statusColor === 'emerald' && styles.textEmerald,
-                                        equb.statusColor === 'amber' && styles.textAmber,
-                                        equb.statusColor === 'blue' && styles.textBlue,
-                                    ]}>
-                                        {equb.status}
-                                    </Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.divider} />
-
-                            <View style={styles.cardBottom}>
-                                <View style={styles.cardStats}>
-                                    <View style={styles.statBadge}>
-                                        <Text style={styles.miniIcon}>👥</Text>
-                                        <Text style={styles.miniText}>{equb.members}</Text>
-                                    </View>
-                                    <View style={styles.statBadge}>
-                                        <Text style={styles.miniIcon}>⏳</Text>
-                                        <Text style={styles.miniText}>{equb.round}</Text>
-                                    </View>
-                                </View>
-                                <Text style={styles.chevron}>›</Text>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
-                </View>
+            {/* Management Section */}
+            <View style={styles.headerRow}>
+                <Text style={styles.sectionTitleText}>Management</Text>
             </View>
-        </>
+
+            <TouchableOpacity
+                style={styles.managementCard}
+                onPress={() => navigation.navigate('My Equb')}
+            >
+                <View style={styles.managementInfo}>
+                    <View style={styles.managementIconBox}>
+                        <Text style={styles.managementIconEmoji}>🐷</Text>
+                    </View>
+                    <View>
+                        <Text style={styles.managementTitle}>Managed Equbs</Text>
+                        <Text style={styles.managementSubtitle}>View active rounds & details</Text>
+                    </View>
+                </View>
+                <Text style={styles.managementChevron}>›</Text>
+            </TouchableOpacity>
+
+            {loading && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator color="#3b82f6" />
+                </View>
+            )}
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
-    /* Sections */
-    sectionContainer: {
+    container: {
         paddingHorizontal: 20,
-        marginBottom: 24,
     },
-    /* Stats Grid */
+    /* Stats */
     statsGrid: {
         flexDirection: 'row',
-        gap: 12,
+        marginBottom: 32,
     },
     statCard: {
         flex: 1,
-        backgroundColor: '#1a2230',
-        borderRadius: 16,
-        padding: 16,
+        backgroundColor: '#161d2a',
+        borderRadius: 24,
+        padding: 20,
         borderWidth: 1,
-        borderColor: '#2c3442',
+        borderColor: 'rgba(255, 255, 255, 0.05)',
     },
     statHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
+        marginBottom: 12,
     },
-    iconBox: {
-        padding: 6,
-        borderRadius: 8,
+    statIconCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 8,
     },
-    statIcon: {
-        fontSize: 16,
+    statIconText: {
+        fontSize: 14,
     },
     statLabel: {
         fontSize: 10,
-        fontWeight: '700',
-        color: '#9da6b9',
-        textTransform: 'uppercase',
+        fontWeight: '800',
+        color: '#64748b',
+        letterSpacing: 0.5,
     },
     statValueRow: {
         flexDirection: 'row',
         alignItems: 'baseline',
-        gap: 4,
     },
     statValue: {
         fontSize: 24,
-        fontWeight: '700',
+        fontWeight: '900',
         color: '#ffffff',
-        letterSpacing: -0.5,
+        marginRight: 4,
     },
     statUnit: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '600',
-        color: '#94a3b8',
+        color: '#475569',
     },
-    /* Action Grid */
-    sectionTitle: {
-        fontSize: 14,
-        fontWeight: '700',
+    /* Quick Actions */
+    headerRow: {
+        marginBottom: 16,
+    },
+    sectionTitleText: {
+        fontSize: 16,
+        fontWeight: '800',
         color: '#ffffff',
-        marginBottom: 12,
-        paddingLeft: 4,
     },
-    actionsGrid: {
+    actionsRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        gap: 12,
+        marginBottom: 32,
     },
-    actionItem: {
-        flex: 1,
+    circularAction: {
         alignItems: 'center',
-        gap: 10,
-        position: 'relative',
+        width: '22%',
     },
-    actionIconBox: {
-        width: 56,
-        height: 56,
-        borderRadius: 16,
+    circleIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
         justifyContent: 'center',
         alignItems: 'center',
+        marginBottom: 8,
         shadowColor: '#3b82f6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
     },
-    actionIconOutline: {
-        width: 56,
-        height: 56,
-        borderRadius: 16,
+    circleIconOutline: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#1a2230',
+        marginBottom: 8,
+        backgroundColor: '#161d2a',
         borderWidth: 1,
-        borderColor: '#2c3442',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
     },
-    actionIconWhite: {
-        fontSize: 26,
+    circleIconText: {
+        fontSize: 28,
         color: '#ffffff',
-        fontWeight: '600',
+        fontWeight: '300',
     },
-    actionIconGray: {
+    circleIconEmoji: {
         fontSize: 24,
-        color: '#9da6b9',
     },
     actionLabel: {
         fontSize: 11,
         fontWeight: '600',
-        color: '#cbd5e1',
-        textAlign: 'center',
+        color: '#94a3b8',
     },
     notificationDot: {
         position: 'absolute',
         top: 0,
         right: 4,
-        width: 14,
-        height: 14,
-        borderRadius: 7,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
         backgroundColor: '#ef4444',
-        borderWidth: 2,
-        borderColor: '#101622',
-        zIndex: 10,
     },
-    /* Managed Equbs */
-    listHeader: {
+    /* Management */
+    managementCard: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
-        paddingHorizontal: 4,
+        justifyContent: 'space-between',
+        backgroundColor: '#161d2a',
+        borderRadius: 24,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
     },
-    listTitle: {
-        fontSize: 18,
+    managementInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    managementIconBox: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    managementIconEmoji: {
+        fontSize: 20,
+    },
+    managementTitle: {
+        fontSize: 17,
         fontWeight: '700',
         color: '#ffffff',
+        marginBottom: 2,
     },
-    viewAllText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#2b6cee',
-    },
-    equbList: {
-        gap: 12,
-    },
-    equbCard: {
-        backgroundColor: '#1a2230',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#2c3442',
-        padding: 16,
-    },
-    cardTop: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 12,
-    },
-    equbName: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#ffffff',
-        marginBottom: 4,
-    },
-    equbMeta: {
-        fontSize: 14,
+    managementSubtitle: {
+        fontSize: 13,
         fontWeight: '500',
-        color: '#9da6b9',
+        color: '#64748b',
     },
-    statusChip: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 6,
-        borderWidth: 1,
-    },
-    statusText: {
-        fontSize: 11,
-        fontWeight: '700',
-    },
-    bgEmerald: { backgroundColor: 'rgba(6, 78, 59, 0.3)', borderColor: 'rgba(6, 95, 70, 0.5)' },
-    textEmerald: { color: '#34d399' },
-    bgAmber: { backgroundColor: 'rgba(120, 53, 15, 0.3)', borderColor: 'rgba(146, 64, 14, 0.5)' },
-    textAmber: { color: '#fbbf24' },
-    bgBlue: { backgroundColor: 'rgba(30, 58, 138, 0.3)', borderColor: 'rgba(30, 64, 175, 0.5)' },
-    textBlue: { color: '#60a5fa' },
-    divider: {
-        height: 1,
-        backgroundColor: '#2c3442',
-        marginBottom: 12,
-    },
-    cardBottom: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    cardStats: {
-        flexDirection: 'row',
-        gap: 16,
-    },
-    statBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    miniIcon: {
-        fontSize: 16,
-    },
-    miniText: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#9da6b9',
-    },
-    chevron: {
+    managementChevron: {
         fontSize: 24,
-        color: '#6b7280',
+        color: '#334155',
         fontWeight: '300',
-        marginTop: -4,
+    },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(10, 15, 24, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 24,
     },
 });

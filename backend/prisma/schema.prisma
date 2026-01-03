@@ -40,6 +40,7 @@ enum ContributionStatus {
   PENDING
   CONFIRMED
   REJECTED
+  SETTLED
 }
 
 enum PayoutStatus {
@@ -58,6 +59,7 @@ enum AuditActionType {
   EQUB_TERMINATED
   EQUB_COMPLETED
   MEMBER_ADDED
+  MEMBER_REMOVED
   CONTRIBUTION_CREATED
   CONTRIBUTION_CONFIRMED
   CONTRIBUTION_REJECTED
@@ -65,6 +67,9 @@ enum AuditActionType {
   PAYOUT_COMPLETED
   PAYOUT_REJECTED
   ROUND_PROGRESSED
+  ROUND_CLOSED
+  CONTRIBUTION_SETTLED
+  INTEGRITY_CHECK_FAILED
 }
 
 // --- Models ---
@@ -75,6 +80,11 @@ model User {
   passwordHash String
   fullName     String
   role         GlobalRole @default(MEMBER)
+  
+  // Profile Settings
+  notificationPreferences Json?      @default("{\"push\": true, \"email\": true, \"sms\": false}")
+  language               String      @default("en")
+
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -89,6 +99,8 @@ model User {
 
 model Equb {
   id               String     @id @default(uuid())
+  // Idempotency: prevent duplicate creation from retries
+  idempotencyKey   String?    @unique
   name             String
   totalRounds      Int
   currentRound     Int        @default(0)
@@ -167,6 +179,8 @@ model Payout {
 }
 
 model AuditEvent {
+  // AuditEvents are append-only. Ordering is deterministic by (timestamp, seqId).
+  seqId       BigInt          @unique @default(autoincrement())
   id          String          @id @default(uuid())
   timestamp   DateTime        @default(now())
   actorUserId String
@@ -179,11 +193,12 @@ model AuditEvent {
   userAgent   String?
   deviceId    String?
   commandId   String?
+  systemVersion String @default("0.0.0")
 
   actor User @relation(fields: [actorUserId], references: [id])
 
   @@index([entityType, entityId])
-  @@index([timestamp])
+  @@index([timestamp, seqId])
   @@index([actorUserId])
   @@map("audit_events")
 }

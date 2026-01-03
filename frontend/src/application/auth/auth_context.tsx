@@ -1,33 +1,57 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useMemo } from 'react';
 import { UserDto } from '../../domain/dtos';
+import { ApiClient } from '../../presentation/services/api_client';
+
+export type AuthStatus = 'BOOTING' | 'UNAUTHENTICATED' | 'AUTHENTICATED';
 
 interface AuthContextType {
     user: UserDto | null;
+    status: AuthStatus;
     setUser: (user: UserDto | null) => void;
+    logout: () => Promise<void>;
+    // Helpers
     isAuthenticated: boolean;
-    isInitialCheckDone: boolean;
-    setInitialCheckDone: (done: boolean) => void;
+    isBooting: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<UserDto | null>(null);
-    const [isInitialCheckDone, setInitialCheckDone] = useState(false);
+    const [user, setUserState] = useState<UserDto | null>(null);
+    const [status, setStatus] = useState<AuthStatus>('BOOTING');
 
-    const handleSetUser = (u: UserDto | null) => {
-        setUser(u);
-        setInitialCheckDone(true);
+    const setUser = (u: UserDto | null) => {
+        if (u) {
+            setUserState(u);
+            setStatus('AUTHENTICATED');
+        } else {
+            setUserState(null);
+            setStatus('UNAUTHENTICATED');
+        }
     };
 
+    const logout = async () => {
+        try {
+            await ApiClient.post('/auth/logout', {});
+        } catch (error) {
+            console.error('[AuthContext] Logout API failed (continuing with local cleanup):', error);
+        } finally {
+            setUserState(null);
+            setStatus('UNAUTHENTICATED');
+        }
+    };
+
+    const value = useMemo(() => ({
+        user,
+        status,
+        setUser,
+        logout,
+        isAuthenticated: status === 'AUTHENTICATED',
+        isBooting: status === 'BOOTING',
+    }), [user, status]);
+
     return (
-        <AuthContext.Provider value={{
-            user,
-            setUser: handleSetUser,
-            isAuthenticated: !!user,
-            isInitialCheckDone,
-            setInitialCheckDone
-        }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );

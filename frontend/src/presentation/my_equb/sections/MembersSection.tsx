@@ -43,6 +43,7 @@ export const MembersSection: React.FC<MembersSectionProps> = ({ role, equbId, on
         name: m.user.fullName,
         phone: '***', // Privacy
         status: 'Active',
+        initials: m.user.fullName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
         darkStatusColor: '#4ade80',
         darkStatusBg: 'rgba(22, 163, 74, 0.3)',
         borderColor: 'rgba(22, 163, 74, 0.5)',
